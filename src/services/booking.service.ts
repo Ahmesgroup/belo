@@ -22,7 +22,7 @@ import {
   buildBookingConfirmationMessages,
   canCancelBooking,
 } from "@/domain/booking/booking.rules";
-import { generateIdempotencyKey } from "@/lib/idempotency";
+import { generateIdempotencyKey } from "@/infrastructure/queue/worker";
 import { AppError } from "@/shared/errors";
 
 // ── INPUT TYPES ───────────────────────────────────────────────

@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
 // GET / PATCH / DELETE sur un service spécifique
 // ============================================================
 
-export async function GET_ONE(
+async function GET_ONE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -280,7 +280,7 @@ export async function GET_ONE(
   }
 }
 
-export async function PATCH_ONE(
+async function PATCH_ONE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -336,7 +336,7 @@ export async function PATCH_ONE(
   }
 }
 
-export async function DELETE_ONE(
+async function DELETE_ONE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -437,7 +437,7 @@ const PhotoUploadSchema = z.object({
   "Fournir soit base64 soit une URL d'image"
 );
 
-export async function POST_PHOTO(
+async function POST_PHOTO(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -535,7 +535,7 @@ export async function POST_PHOTO(
   }
 }
 
-export async function DELETE_PHOTO(
+async function DELETE_PHOTO(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {

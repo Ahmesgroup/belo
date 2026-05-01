@@ -102,23 +102,15 @@ export async function GET(req: NextRequest) {
           id:          true,
           name:        true,
           slug:        true,
-          description: true,
           city:        true,
           country:     true,
           address:     true,
           photos:      true,
           plan:        true,
-          facebook:    true,
-          instagram:   true,
-          isVerified:  true,
           _count: {
             select: {
               bookings: true,
-              reviews:  true,
             },
-          },
-          reviews: {
-            select: { rating: true },
           },
         },
         skip:  (page - 1) * pageSize,
@@ -132,19 +124,9 @@ export async function GET(req: NextRequest) {
       prisma.tenant.count({ where }),
     ]);
 
-    // Calculer la note moyenne côté serveur
-    const tenantsWithRating = tenants.map((t) => {
-      const avgRating =
-        t.reviews.length > 0
-          ? t.reviews.reduce((sum, r) => sum + r.rating, 0) / t.reviews.length
-          : null;
-      const { reviews, ...rest } = t;
-      return { ...rest, avgRating: avgRating ? Math.round(avgRating * 10) / 10 : null };
-    });
-
     return NextResponse.json({
       data: {
-        tenants: tenantsWithRating,
+        tenants,
         pagination: {
           page, pageSize, total,
           totalPages: Math.ceil(total / pageSize),
@@ -258,7 +240,7 @@ export async function POST(req: NextRequest) {
 // PATCH → mise à jour (gérant ou admin)
 // ============================================================
 
-export async function GET_ONE(
+async function GET_ONE(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -272,31 +254,25 @@ export async function GET_ONE(
         status: "ACTIVE",
       },
       select: {
-        id:          true,
-        name:        true,
-        slug:        true,
-        description: true,
-        phone:       true,
-        whatsapp:    true,
-        email:       true,
-        address:     true,
-        city:        true,
-        country:     true,
-        photos:      true,
-        plan:        true,
-        facebook:    true,
-        instagram:   true,
-        tiktok:      true,
-        website:     true,
-        isVerified:  true,
-        depositEnabled:  true,
-        depositPercent:  true,
+        id:             true,
+        name:           true,
+        slug:           true,
+        phone:          true,
+        whatsapp:       true,
+        email:          true,
+        address:        true,
+        city:           true,
+        country:        true,
+        photos:         true,
+        plan:           true,
+        socials:        true,
+        depositEnabled: true,
+        depositPercent: true,
         services: {
           where:   { isActive: true },
           select: {
             id:          true,
             name:        true,
-            description: true,
             category:    true,
             priceCents:  true,
             durationMin: true,
@@ -304,19 +280,7 @@ export async function GET_ONE(
           },
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         },
-        reviews: {
-          where:   { isVisible: true },
-          select: {
-            id:        true,
-            rating:    true,
-            comment:   true,
-            createdAt: true,
-            user:      { select: { name: true, avatar: true } },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 20,
-        },
-        _count: { select: { bookings: true, reviews: true } },
+        _count: { select: { bookings: true } },
       },
     });
 
@@ -324,16 +288,8 @@ export async function GET_ONE(
       return NextResponse.json(AppErrors.TENANT_NOT_FOUND().toJSON(), { status: 404 });
     }
 
-    // Calculer note moyenne
-    const avgRating =
-      tenant.reviews.length > 0
-        ? Math.round(
-            (tenant.reviews.reduce((s, r) => s + r.rating, 0) / tenant.reviews.length) * 10
-          ) / 10
-        : null;
-
     return NextResponse.json(
-      { data: { ...tenant, avgRating } },
+      { data: tenant },
       { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" } }
     );
   } catch (err) {
@@ -341,7 +297,7 @@ export async function GET_ONE(
   }
 }
 
-export async function PATCH_ONE(
+async function PATCH_ONE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {

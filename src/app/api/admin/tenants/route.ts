@@ -1,12 +1,8 @@
 // ============================================================
 // app/api/admin/tenants/route.ts
-// Gestion des salons par l'équipe admin Belo
-//
-// GET    /api/admin/tenants           → liste complète + filtres
-// POST   /api/admin/tenants/[id]/action → bloquer, valider, changer plan...
-//
-// IMPORTANT : chaque action est loggée dans AuditLog
-// Permissions : voir matrice dans shared/errors.ts
+// GET  /api/admin/tenants              → liste complète + filtres
+// POST /api/admin/tenants?action=do-action&id=xxx → action sur un salon
+// POST /api/admin/tenants?action=bulk  → actions en masse
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -32,18 +28,15 @@ const GetAdminTenantsSchema = z.object({
 
 const AdminActionSchema = z.object({
   action: z.enum([
-    "validate",     // PENDING → ACTIVE
-    "block",        // → BLOCKED
-    "suspend",      // → SUSPENDED
-    "reactivate",   // BLOCKED/SUSPENDED → ACTIVE
-    "change_plan",  // changer FREE/PRO/PREMIUM
-    "send_message", // envoyer message WhatsApp au gérant
+    "validate",
+    "block",
+    "suspend",
+    "reactivate",
+    "change_plan",
+    "send_message",
   ]),
-  // Pour change_plan
   newPlan: z.enum(["FREE", "PRO", "PREMIUM"]).optional(),
-  // Pour send_message
   message: z.string().max(1000).optional(),
-  // Pour toutes les actions
   reason:  z.string().max(500).optional(),
 });
 
@@ -84,7 +77,7 @@ export async function GET(req: NextRequest) {
     if (status) where.status = status;
     if (plan)   where.plan   = plan;
     if (city)   where.city   = { contains: city, mode: "insensitive" };
-    if (fraud)  where.fraudAlerts = { some: { status: { in: ["NEW", "REVIEWING"] } } };
+    if (fraud)  where.fraudAlerts = { some: { status: { in: ["NEW", "UNDER_REVIEW"] } } };
     if (search) {
       where.OR = [
         { name:  { contains: search, mode: "insensitive" } },
@@ -95,7 +88,7 @@ export async function GET(req: NextRequest) {
 
     const orderBy: Record<string, string> =
       sortBy === "revenue"  ? { bookings: sortDir } :
-      sortBy === "bookings" ? { bookingsThisMonth: sortDir } :
+      sortBy === "bookings" ? { bookingsUsedMonth: sortDir } :
       { createdAt: sortDir };
 
     const [tenants, total, stats] = await Promise.all([
@@ -111,19 +104,17 @@ export async function GET(req: NextRequest) {
           email:         true,
           plan:          true,
           status:        true,
-          isVerified:    true,
-          createdAt:     true,
-          bookingsThisMonth: true,
+          createdAt:         true,
+          bookingsUsedMonth: true,
           _count: {
             select: {
               bookings:    true,
-              reviews:     true,
               fraudAlerts: true,
             },
           },
           fraudAlerts: {
-            where: { status: { in: ["NEW", "REVIEWING"] } },
-            select: { id: true, score: true, status: true },
+            where: { status: { in: ["NEW", "UNDER_REVIEW"] } },
+            select: { id: true, riskScore: true, status: true },
             take: 1,
           },
           users: {
@@ -137,7 +128,6 @@ export async function GET(req: NextRequest) {
         take:    pageSize,
       }),
       prisma.tenant.count({ where: where as any }),
-      // Stats globales pour la topbar admin
       prisma.tenant.groupBy({
         by:    ["status"],
         _count: { _all: true },
@@ -160,14 +150,33 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ── POST /api/admin/tenants/[id]/action ───────────────────────
-// Action sur un salon spécifique
+// ── POST /api/admin/tenants ───────────────────────────────────
+// ?action=do-action&id=TENANT_ID  → action sur un salon
+// ?action=bulk                    → actions en masse
 
-export async function POST_ACTION(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const routeAction = searchParams.get("action");
+
+  if (routeAction === "bulk") return handleBulk(req);
+  if (routeAction === "do-action") return handleAction(req, searchParams.get("id"));
+  return NextResponse.json(
+    { error: { code: "UNKNOWN_ACTION", message: "Paramètre action requis: do-action ou bulk." } },
+    { status: 400 }
+  );
+}
+
+// ── Action sur un salon ───────────────────────────────────────
+
+async function handleAction(req: NextRequest, tenantId: string | null) {
   try {
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: { code: "MISSING_PARAM", message: "Paramètre id requis." } },
+        { status: 400 }
+      );
+    }
+
     const auth = await withAuth(req);
 
     const raw = await req.json().catch(() => null);
@@ -180,8 +189,7 @@ export async function POST_ACTION(
 
     const { action, newPlan, message, reason } = parsed.data;
 
-    // Vérifier permissions selon l'action
-    const requiresSuperAdmin = ["change_plan"].includes(action)
+    const requiresSuperAdmin = action === "change_plan"
       ? auth.ok && auth.role !== "SUPER_ADMIN" && auth.role !== "ADMIN"
       : false;
 
@@ -192,8 +200,7 @@ export async function POST_ACTION(
     const roleCheck = withRole(auth, ["ADMIN", "SUPER_ADMIN", "SUPPORT"]);
     if (!roleCheck.ok) return roleCheck.response;
 
-    // Support ne peut que valider
-    if (auth.ok && auth.role === "SUPPORT" && !["validate"].includes(action)) {
+    if (auth.ok && auth.role === "SUPPORT" && action !== "validate") {
       return NextResponse.json(
         AppErrors.FORBIDDEN("Le support peut seulement valider les salons.").toJSON(),
         { status: 403 }
@@ -201,8 +208,8 @@ export async function POST_ACTION(
     }
 
     const tenant = await prisma.tenant.findUnique({
-      where:  { id: params.id },
-      select: { id: true, name: true, status: true, plan: true },
+      where:  { id: tenantId },
+      select: { id: true, name: true, status: true, plan: true, phone: true, whatsapp: true },
     });
 
     if (!tenant) {
@@ -214,68 +221,47 @@ export async function POST_ACTION(
     await prisma.$transaction(async (tx) => {
       switch (action) {
         case "validate":
-          await tx.tenant.update({
-            where: { id: params.id },
-            data:  { status: "ACTIVE", isVerified: true },
-          });
+          await tx.tenant.update({ where: { id: tenantId }, data: { status: "ACTIVE" } });
           result = { status: "ACTIVE", message: "Salon validé et activé." };
           break;
-
         case "block":
-          await tx.tenant.update({
-            where: { id: params.id },
-            data:  { status: "BLOCKED" },
-          });
+          await tx.tenant.update({ where: { id: tenantId }, data: { status: "BLOCKED" } });
           result = { status: "BLOCKED" };
           break;
-
         case "suspend":
-          await tx.tenant.update({
-            where: { id: params.id },
-            data:  { status: "SUSPENDED" },
-          });
+          await tx.tenant.update({ where: { id: tenantId }, data: { status: "SUSPENDED" } });
           result = { status: "SUSPENDED" };
           break;
-
         case "reactivate":
-          await tx.tenant.update({
-            where: { id: params.id },
-            data:  { status: "ACTIVE" },
-          });
+          await tx.tenant.update({ where: { id: tenantId }, data: { status: "ACTIVE" } });
           result = { status: "ACTIVE" };
           break;
-
         case "change_plan":
-          if (!newPlan) {
-            throw new Error("newPlan requis pour change_plan");
-          }
-          await tx.tenant.update({
-            where: { id: params.id },
-            data:  { plan: newPlan },
-          });
+          if (!newPlan) throw new Error("newPlan requis pour change_plan");
+          await tx.tenant.update({ where: { id: tenantId }, data: { plan: newPlan } });
           result = { plan: newPlan, previousPlan: tenant.plan };
           break;
-
         case "send_message":
-          // Enqueue notification WhatsApp via outbox
           await tx.notificationLog.create({
             data: {
-              tenantId:  params.id,
-              channel:   "WHATSAPP",
-              status:    "PENDING",
-              payload:   { message: message ?? "", isAdminMessage: true },
+              tenantId,
+              type:            "PROMO",
+              channel:         "whatsapp",
+              status:          "PENDING",
+              recipient:       tenant.whatsapp ?? tenant.phone ?? "",
+              idempotencyKey:  `admin-msg-${tenantId}-${Date.now()}`,
+              payload:         { message: message ?? "", isAdminMessage: true },
             },
           });
           result = { messageSent: true };
           break;
       }
 
-      // TOUJOURS logger l'action admin
       await tx.auditLog.create({
         data: {
           action:   `tenant.${action}`,
           entity:   "Tenant",
-          entityId: params.id,
+          entityId: tenantId,
           actorId:  auth.ok ? auth.userId : null,
           oldValue: { status: tenant.status, plan: tenant.plan },
           newValue: { ...result, reason },
@@ -289,10 +275,9 @@ export async function POST_ACTION(
   }
 }
 
-// ── POST /api/admin/tenants/bulk ──────────────────────────────
-// Actions en masse sur plusieurs salons
+// ── Actions en masse ──────────────────────────────────────────
 
-export async function POST_BULK(req: NextRequest) {
+async function handleBulk(req: NextRequest) {
   try {
     const auth = await withAuth(req);
     const roleCheck = withRole(auth, ["ADMIN", "SUPER_ADMIN"]);
@@ -318,7 +303,6 @@ export async function POST_BULK(req: NextRequest) {
     const newStatus = statusMap[action];
 
     await prisma.$transaction(async (tx) => {
-      // Mettre à jour tous les tenants en une seule requête
       await tx.tenant.updateMany({
         where: { id: { in: tenantIds } },
         data:  {
@@ -327,7 +311,6 @@ export async function POST_BULK(req: NextRequest) {
         },
       });
 
-      // Logger chaque action individuellement (audit trail)
       await tx.auditLog.createMany({
         data: tenantIds.map((id) => ({
           action:   `tenant.${action}`,
@@ -340,12 +323,7 @@ export async function POST_BULK(req: NextRequest) {
     });
 
     return NextResponse.json({
-      data: {
-        success: true,
-        action,
-        count:   tenantIds.length,
-        status:  newStatus,
-      },
+      data: { success: true, action, count: tenantIds.length, status: newStatus },
     });
   } catch (err) {
     return handleRouteError(err);

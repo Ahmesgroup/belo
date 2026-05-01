@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth } from "@/middleware";
+import { withAuth, withTenant } from "@/middleware";
 import { zodErrorResponse } from "@/lib/zod-formatter";
 import { handleRouteError, AppErrors } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 const store = new Map<string, { count: number; resetAt: number }>();
-setInterval(() => { const now = Date.now(); for (const [k,v] of store) if (v.resetAt < now) store.delete(k); }, 60_000);
+setInterval(() => { const now = Date.now(); store.forEach((v, k) => { if (v.resetAt < now) store.delete(k); }); }, 60_000);
 
 export async function rateLimit(req: NextRequest, opts: { max: number; windowMs: number }): Promise<boolean> {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";

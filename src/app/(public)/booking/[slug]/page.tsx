@@ -75,7 +75,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
               <div style={{fontFamily:"var(--serif)",fontSize:15,fontWeight:700,marginBottom:14}}>Choisissez votre prestation</div>
               <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
                 {SERVICES.map(s => (
-                  <div key={s.id} onClick={() => setSvc(s)} style={{background:"var(--card)",border:`1px solid ${svc?.id===s.id?"rgba(34,211,138,.4)":"var(--border)"}`,borderRadius:16,padding:16,display:"flex",alignItems:"center",gap:14,cursor:"pointer",transition:".2s",background:svc?.id===s.id?"rgba(34,211,138,.04)":"var(--card)"}}>
+                  <div key={s.id} onClick={() => setSvc(s)} style={{background:svc?.id===s.id?"rgba(34,211,138,.04)":"var(--card)",border:`1px solid ${svc?.id===s.id?"rgba(34,211,138,.4)":"var(--border)"}`,borderRadius:16,padding:16,display:"flex",alignItems:"center",gap:14,cursor:"pointer",transition:".2s"}}>
                     <div style={{width:44,height:44,borderRadius:12,background:"rgba(34,211,138,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{s.icon}</div>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:600,fontSize:14,marginBottom:2}}>{s.name}</div>
@@ -100,7 +100,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
               <div style={{fontFamily:"var(--serif)",fontSize:15,fontWeight:700,marginBottom:14}}>Choisissez votre créneau</div>
               <div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:20,paddingBottom:4}}>
                 {DATES.map(d => (
-                  <div key={d.num} onClick={() => setDate(d.num)} style={{flexShrink:0,width:64,background:"var(--card)",border:`1px solid ${date===d.num?"var(--g2)":"var(--border)"}`,borderRadius:12,padding:"8px 4px",textAlign:"center",cursor:"pointer",background:date===d.num?"rgba(34,211,138,.1)":"var(--card)"}}>
+                  <div key={d.num} onClick={() => setDate(d.num)} style={{flexShrink:0,width:64,background:date===d.num?"rgba(34,211,138,.1)":"var(--card)",border:`1px solid ${date===d.num?"var(--g2)":"var(--border)"}`,borderRadius:12,padding:"8px 4px",textAlign:"center",cursor:"pointer"}}>
                     <div style={{fontSize:10,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{d.day}</div>
                     <div style={{fontFamily:"var(--serif)",fontSize:20,fontWeight:700}}>{d.num}</div>
                     <div style={{fontSize:10,color:"var(--g2)",marginTop:2}}>{d.avail} dispo</div>

@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   // Monthly quota reset on 1st of month
   const isFirstDay = new Date().getDate() === 1;
   if (isFirstDay) {
-    await prisma.tenant.updateMany({ data: { bookingsThisMonth: 0, lastQuotaReset: new Date() } });
+    await prisma.tenant.updateMany({ data: { bookingsUsedMonth: 0, bookingsResetAt: new Date() } });
   }
   const [otp, notif, audit] = await Promise.all([
     prisma.auditLog.deleteMany({ where: { action:"otp.sent", createdAt:{ lt:thirtyDaysAgo } } }),

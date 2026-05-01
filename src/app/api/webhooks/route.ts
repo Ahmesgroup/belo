@@ -173,6 +173,7 @@ async function confirmPayment(
       paymentStatus: true,
       depositCents:  true,
       priceCents:    true,
+      user:          { select: { phone: true } },
     },
   });
 
@@ -211,25 +212,27 @@ async function confirmPayment(
     // Créer les notifications dans l'outbox
     await tx.notificationLog.createMany({
       data: [
-        // Notification client
         {
-          tenantId:  booking.tenantId,
-          bookingId: booking.id,
-          channel:   "WHATSAPP",
-          status:    "PENDING",
+          tenantId:       booking.tenantId,
+          bookingId:      booking.id,
+          type:           "BOOKING_CONFIRMED",
+          channel:        "whatsapp",
+          status:         "PENDING",
+          recipient:      booking.user?.phone ?? "",
+          idempotencyKey: `confirm-client-${booking.id}`,
           payload: {
-            type:    "booking_confirmed_client",
             message: `✅ Votre réservation est confirmée ! Paiement reçu via ${provider}. Rendez-vous confirmé.`,
           },
         },
-        // Notification gérant
         {
-          tenantId:  booking.tenantId,
-          bookingId: booking.id,
-          channel:   "WHATSAPP",
-          status:    "PENDING",
+          tenantId:       booking.tenantId,
+          bookingId:      booking.id,
+          type:           "BOOKING_CONFIRMED",
+          channel:        "whatsapp",
+          status:         "PENDING",
+          recipient:      booking.tenantId,
+          idempotencyKey: `confirm-owner-${booking.id}`,
           payload: {
-            type:    "booking_confirmed_owner",
             message: `💰 Paiement reçu ! Nouvelle réservation confirmée. Ref: ${paymentRef ?? idempotencyKey}.`,
           },
         },
