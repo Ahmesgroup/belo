@@ -1,6 +1,8 @@
 {
   "crons": [
-    { "path": "/api/cron/notifications", "schedule": "* * * * *" },
-    { "path": "/api/cron/purge-logs",    "schedule": "0 2 * * *" }
+    {
+      "path": "/api/cron/purge-logs",
+      "schedule": "0 2 * * *"
+    }
   ]
 }
