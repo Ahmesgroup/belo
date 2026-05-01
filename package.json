@@ -1,0 +1,44 @@
+{
+  "name": "belo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma migrate deploy && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "ts-node -P tsconfig.seed.json prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset --force"
+  },
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "^18",
+    "react-dom": "^18",
+    "typescript": "^5",
+    "@prisma/client": "^5.13",
+    "jose": "^5.2",
+    "zod": "^3.23",
+    "uuid": "^9.0",
+    "date-fns": "^3.6",
+    "date-fns-tz": "^3.1",
+    "clsx": "^2.1",
+    "tailwind-merge": "^2.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.13",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/uuid": "^9.0",
+    "autoprefixer": "^10",
+    "postcss": "^8",
+    "tailwindcss": "^3.4",
+    "ts-node": "^10.9"
+  },
+  "prisma": {
+    "seed": "ts-node -P tsconfig.seed.json prisma/seed.ts"
+  }
+}

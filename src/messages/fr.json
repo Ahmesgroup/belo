@@ -1,0 +1,8 @@
+{
+  "nav": { "discover":"Découvrir", "how_it_works":"Comment ça marche", "for_salons":"Pour les salons", "download":"Télécharger", "login":"Connexion", "book":"Réserver →" },
+  "hero": { "eyebrow":"✦ Disponible à Dakar, Thiès, Saint-Louis", "title":"La beauté réservée en {seconds} secondes.", "subtitle":"Confirmée sur WhatsApp.", "search_service":"Coiffure, manucure, massage…", "search_city":"Dakar, Thiès…", "search_btn":"Chercher →" },
+  "categories": { "all":"✦ Tous", "hair":"💇‍♀️ Coiffure", "nails":"💅 Manucure", "massage":"💆‍♀️ Massage", "spa":"🧖‍♀️ Soins visage", "makeup":"💄 Maquillage", "waxing":"🧴 Épilation", "barber":"✂️ Barbershop" },
+  "booking": { "step_service":"Service", "step_slot":"Créneau", "step_confirm":"Confirmer", "step_done":"✓ Réservé", "confirm_btn":"Payer {amount} →", "success_title":"Réservation confirmée !" },
+  "plans": { "free":"Gratuit", "monthly":"Mensuel", "annual":"Annuel — 2 mois offerts", "no_commitment":"Sans engagement" },
+  "dashboard": { "quota_alert":"Il vous reste {remaining} bookings ce mois", "upgrade_cta":"Passer à Pro →" }
+}

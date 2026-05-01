@@ -1,0 +1,455 @@
+// ============================================================
+// BELO — PRISMA SCHEMA (PRODUCTION)
+// DB: PostgreSQL sur Neon (serverless, scale-to-zero)
+//
+// STRATÉGIE COÛT :
+//  • Neon free tier = 0.5 GB storage, 190h compute/mois
+//  • Indexes ciblés uniquement (pas d'index sur tout)
+//  • Pas de colonnes inutiles (JSON pour données flexibles)
+//  • softDelete sur Tenant/User (pas de purge accidentelle)
+//  • NotificationLog auto-archivé via cron (garde DB légère)
+//  • Pas de Redis Phase 1 → PostgreSQL fait la queue
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Neon : active connection pooling via proxy
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Plan {
+  FREE
+  PRO
+  PREMIUM
+}
+
+enum TenantStatus {
+  PENDING      // en attente de validation admin
+  ACTIVE       // opérationnel
+  SUSPENDED    // suspendu temporairement
+  BLOCKED      // bloqué définitivement
+  FRAUD        // fraude suspectée
+}
+
+enum UserRole {
+  CLIENT
+  OWNER        // gérant principal du salon
+  STAFF        // employé du salon
+  ADMIN        // admin plateforme
+  SUPER_ADMIN  // root admin AHMES
+}
+
+enum BookingStatus {
+  PENDING      // créée, paiement non encore confirmé
+  CONFIRMED    // paiement ok, slot réservé
+  COMPLETED    // prestation effectuée
+  CANCELLED    // annulée (client ou gérant)
+  NO_SHOW      // client absent
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum PaymentProvider {
+  WAVE
+  ORANGE_MONEY
+  STRIPE
+  PAYSTACK      // Nigeria
+  MTN_MONEY     // Côte d'Ivoire
+  CASH
+}
+
+enum NotifStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  ARCHIVED
+}
+
+enum NotifType {
+  BOOKING_CONFIRMED
+  BOOKING_REMINDER   // 24h avant
+  BOOKING_CANCELLED
+  BOOKING_COMPLETED
+  PAYMENT_RECEIVED
+  WELCOME
+  PROMO
+}
+
+enum FraudStatus {
+  NEW
+  UNDER_REVIEW
+  ACTION_TAKEN
+  CLOSED
+}
+
+// ============================================================
+// TENANT (1 salon = 1 tenant)
+// TABLE CENTRALE du multi-tenant
+// ============================================================
+
+model Tenant {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique  // url-friendly : "studio-elegance"
+  plan        Plan         @default(FREE)
+  status      TenantStatus @default(PENDING)
+
+  // Infos salon
+  phone       String?
+  whatsapp    String?
+  email       String?
+  address     String?
+  city        String?
+  country     String       @default("SN")  // ISO 3166
+  timezone    String       @default("Africa/Dakar")
+  currency    String       @default("XOF")  // FCFA
+
+  // Médias (URLs stockées — pas de blob en DB)
+  logoUrl     String?
+  coverUrl    String?
+  photos      String[]     @default([])  // array d'URLs
+
+  // Réseaux sociaux (JSON compact — évite colonnes nulles)
+  socials     Json?
+  // { facebook?, instagram?, tiktok?, website? }
+
+  // Config acompte
+  depositEnabled    Boolean  @default(false)
+  depositPercent    Int      @default(30)  // 10-100
+
+  // Compte paiement principal
+  waveNumber        String?
+  orangeMoneyNumber String?
+  bankAccount       Json?
+  // { bank, iban, accountName }
+
+  // Plan limits (dénormalisé pour perf — évite JOIN)
+  bookingsUsedMonth Int      @default(0)
+  bookingsResetAt   DateTime @default(now())
+
+  // Metadata
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?    // soft delete
+
+  // Relations
+  users       User[]
+  services    Service[]
+  slots       Slot[]
+  bookings    Booking[]
+  notifLogs   NotificationLog[]
+  fraudAlerts FraudAlert[]
+  auditLogs   AuditLog[]
+
+  // INDEXES (ciblés — coût minimal)
+  @@index([status])           // filtrer actifs/bloqués
+  @@index([plan])             // filtrer par plan
+  @@index([country])          // analytics par pays
+  @@index([createdAt])        // tri par date inscription
+  @@index([deletedAt])        // exclure soft-deleted
+}
+
+// ============================================================
+// USER
+// Client OU Staff/Owner d'un tenant
+// ============================================================
+
+model User {
+  id          String    @id @default(cuid())
+  phone       String    @unique  // identifiant principal (+221...)
+  email       String?   @unique
+  name        String
+  avatarUrl   String?
+  role        UserRole  @default(CLIENT)
+
+  // Client uniquement
+  city        String?
+  country     String    @default("SN")
+  preferences Json?     // { favoriteCategories: [], notifs: {} }
+
+  // Tenant (null si role=CLIENT)
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+
+  // Auth
+  hashedPin   String?   // PIN 4 chiffres hashé bcrypt
+  otpSecret   String?   // TOTP 2FA (staff/admin)
+  lastLoginAt DateTime?
+
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // soft delete
+
+  // Relations
+  bookings    Booking[]
+  reviews     Review[]
+  auditLogs   AuditLog[]
+
+  // INDEXES
+  @@index([tenantId])         // lister staff d'un salon
+  @@index([role])             // filtrer par rôle
+  @@index([deletedAt])
+}
+
+// ============================================================
+// SERVICE (prestation d'un salon)
+// ============================================================
+
+model Service {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  name        String
+  description String?
+  category    String   // "nails" | "massage" | "hair" | "beauty"
+  priceCents  Int      // toujours en centimes INT (jamais Float)
+  durationMin Int      // durée en minutes
+  photos      String[] @default([])
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)  // ordre d'affichage
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookings    Booking[]
+  slots       Slot[]
+
+  // INDEXES
+  @@index([tenantId, isActive])  // services actifs d'un salon
+  @@index([tenantId, category])  // par catégorie
+}
+
+// ============================================================
+// SLOT (créneau horaire disponible)
+// Généré à l'avance par le gérant ou par cron
+// ============================================================
+
+model Slot {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id])
+
+  // Le créneau
+  startsAt    DateTime  // date + heure exacte (UTC)
+  endsAt      DateTime
+  isAvailable Boolean   @default(true)
+
+  createdAt   DateTime  @default(now())
+
+  bookings    Booking[]
+
+  // INDEXES — critiques pour perf et anti-double-booking
+  @@index([tenantId, startsAt, isAvailable])  // disponibilités
+  @@index([tenantId, startsAt])               // planning du jour
+}
+
+// ============================================================
+// BOOKING — LE CŒUR DU SYSTÈME
+// ============================================================
+
+model Booking {
+  id               String        @id @default(cuid())
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id])
+
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+
+  serviceId        String
+  service          Service       @relation(fields: [serviceId], references: [id])
+
+  slotId           String
+  slot             Slot          @relation(fields: [slotId], references: [id])
+
+  status           BookingStatus @default(PENDING)
+  paymentStatus    PaymentStatus @default(PENDING)
+
+  // Prix au moment de la réservation (snapshot — prix peut changer)
+  priceCents       Int
+  depositCents     Int           @default(0)  // acompte payé
+  currency         String        @default("XOF")
+
+  // Paiement
+  paymentProvider  PaymentProvider?
+  paymentRef       String?       // référence Wave/Orange Money
+
+  // IDEMPOTENCY — anti double-booking côté client
+  idempotencyKey   String        @unique
+
+  // Notes
+  clientNote       String?
+  staffNote        String?       // visible gérant uniquement
+  cancelReason     String?
+
+  // Timestamps métier
+  confirmedAt      DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  notifLogs        NotificationLog[]
+  review           Review?
+
+  // CONTRAINTE ANTI DOUBLE-BOOKING (niveau DB — inviolable)
+  // Un slot ne peut avoir qu'une seule réservation CONFIRMED ou PENDING
+  @@unique([slotId, status], name: "unique_slot_active_booking")
+
+  // INDEXES
+  @@index([tenantId, status])           // bookings du jour par statut
+  @@index([tenantId, createdAt])        // analytics revenue
+  @@index([userId])                     // historique client
+  @@index([slotId])                     // lookup slot
+  @@index([idempotencyKey])             // dédup rapide
+  @@index([tenantId, paymentStatus])    // bookings non payés
+}
+
+// ============================================================
+// NOTIFICATION LOG (OUTBOX PATTERN)
+// Jamais envoyer WhatsApp directement — toujours passer par ici
+// Worker poll cette table toutes les 30s
+// ============================================================
+
+model NotificationLog {
+  id            String      @id @default(cuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+
+  bookingId     String?
+  booking       Booking?    @relation(fields: [bookingId], references: [id])
+
+  type          NotifType
+  status        NotifStatus @default(PENDING)
+
+  // Destinataire
+  recipient     String      // numéro de tel ou email
+  channel       String      @default("whatsapp")  // whatsapp | sms | email
+
+  // Contenu
+  payload       Json
+  // { phone, message, templateId?, params? }
+
+  // Retry logic
+  attempts      Int         @default(0)
+  maxAttempts   Int         @default(3)
+  lastAttemptAt DateTime?
+  lockedAt      DateTime?   // SKIP LOCKED en cours
+  lockedUntil   DateTime?   // expire le lock après 5min
+
+  // Provider response
+  providerMsgId String?     // ID retourné par WhatsApp/Twilio
+  errorMsg      String?
+
+  // IDEMPOTENCY — le provider ne recevra jamais 2x le même message
+  idempotencyKey String     @unique
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // INDEXES — critiques pour le worker
+  @@index([status, attempts, createdAt])  // jobs PENDING à traiter
+  @@index([tenantId])
+  @@index([bookingId])
+  // Note: lockedAt non-indexé (worker filtre status=PENDING d'abord)
+}
+
+// ============================================================
+// REVIEW (avis client)
+// ============================================================
+
+model Review {
+  id        String   @id @default(cuid())
+  tenantId  String   // redondant mais évite JOIN
+  bookingId String   @unique  // 1 booking = max 1 avis
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  rating    Int      // 1-5
+  comment   String?
+  isVisible Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, isVisible])   // avis visibles d'un salon
+  @@index([tenantId, rating])      // note moyenne
+}
+
+// ============================================================
+// FRAUD ALERT
+// Généré automatiquement par fraud.service.ts
+// ============================================================
+
+model FraudAlert {
+  id         String      @id @default(cuid())
+  tenantId   String
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+
+  status     FraudStatus @default(NEW)
+  riskScore  Int         // 0-100
+  signals    Json        // [{ type, value, severity }]
+  assignedTo String?     // userId admin assigné
+  notes      String?     // commentaire admin interne
+  resolvedAt DateTime?
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([status])
+  @@index([tenantId])
+  @@index([riskScore])
+}
+
+// ============================================================
+// AUDIT LOG
+// Toutes les actions admin → immuable, jamais de UPDATE/DELETE
+// Coût minimal : 1 INSERT par action critique
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+
+  action     String   // "tenant.blocked" | "booking.cancelled" | ...
+  entity     String   // "Tenant" | "Booking" | ...
+  entityId   String
+  oldValue   Json?    // avant
+  newValue   Json?    // après
+  ip         String?
+  userAgent  String?
+
+  createdAt  DateTime @default(now())
+
+  // Pas d'updatedAt — immuable par design
+  @@index([tenantId, createdAt])
+  @@index([actorId])
+  @@index([entity, entityId])
+  @@index([action])
+}

@@ -1,0 +1,6 @@
+{
+  "nav": { "discover":"Discover", "how_it_works":"How it works", "for_salons":"For salons", "login":"Login", "book":"Book now →" },
+  "hero": { "eyebrow":"✦ Available in Dakar, Thiès, Saint-Louis", "title":"Beauty booked in {seconds} seconds.", "subtitle":"Confirmed on WhatsApp.", "search_service":"Haircut, manicure, massage…", "search_city":"Dakar, Thiès…", "search_btn":"Search →" },
+  "booking": { "step_service":"Service", "step_slot":"Slot", "step_confirm":"Confirm", "step_done":"✓ Booked", "success_title":"Booking confirmed!" },
+  "plans": { "free":"Free", "monthly":"Monthly", "annual":"Annual — 2 months free", "no_commitment":"No commitment" }
+}
