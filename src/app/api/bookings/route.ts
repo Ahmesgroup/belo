@@ -19,10 +19,11 @@ import { rateLimit } from "@/lib/rate-limit";
 const CreateBookingSchema = z.object({
   serviceId:       z.string().cuid(),
   slotId:          z.string().cuid(),
+  tenantId:        z.string().cuid().optional(), // fallback quand middleware pass-through
   clientNote:      z.string().max(500).optional(),
   paymentProvider: z.enum(["wave", "orange_money", "stripe", "paystack", "mtn_money"]).optional(),
   paymentRef:      z.string().optional(),
-  idempotencyKey:  z.string().uuid(), // généré côté client
+  idempotencyKey:  z.string().uuid(),
 });
 
 const GetBookingsSchema = z.object({
@@ -77,8 +78,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Extraire tenantId depuis le header (posé par middleware.ts)
-    const tenantId = req.headers.get("x-tenant-id");
+    // 4. tenantId — depuis header (middleware) ou body (pass-through mode)
+    const tenantId = req.headers.get("x-tenant-id") ?? parsed.data.tenantId ?? null;
     if (!tenantId) {
       return NextResponse.json(
         { error: { code: "MISSING_TENANT", message: "Contexte salon manquant." } },

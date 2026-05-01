@@ -54,7 +54,6 @@ export default function LoginPage() {
                 </div>
                 {error && <div style={{color:"var(--red)",fontSize:12,marginBottom:12}}>{error}</div>}
                 <button onClick={sendOtp} disabled={loading} style={{width:"100%",padding:14,borderRadius:12,border:"none",background:"var(--g)",color:"#fff",fontFamily:"var(--serif)",fontSize:15,fontWeight:700,cursor:"pointer"}}>{loading ? "Envoi..." : "Envoyer le code"}</button>
-                <div style={{textAlign:"center",marginTop:12,fontSize:11,color:"var(--text3)"}}>Code OTP visible dans le terminal en mode dev</div>
               </>
             ) : (
               <>

@@ -1,14 +1,24 @@
+"use client";
+import { useState, useEffect } from "react";
 import { PublicNav } from "@/components/ui/Nav";
 import Link from "next/link";
 
+type Tenant = { id: string; name: string; slug: string; city: string | null; plan: string; _count: { bookings: number } };
+
+const planBadge = (p: string) =>
+  p === "PREMIUM" ? { bg:"rgba(144,96,232,.12)", color:"var(--purple)", text:"★ Premium" } :
+  p === "PRO"     ? { bg:"rgba(245,166,35,.12)",  color:"var(--amber)",  text:"⚡ PRO" } :
+                    { bg:"rgba(34,211,138,.12)",   color:"var(--g2)",    text:"● Disponible" };
+
 export default function LandingPage() {
-  const salons = [
-    { name:"Salon Aminata Beauty", loc:"Almadies, Dakar", cat:"💇‍♀️", rating:"4.9", reviews:128, price:"5 000", plan:"active", slug:"salon-aminata-beauty" },
-    { name:"Nails & Co Dakar",     loc:"Plateau, Dakar",  cat:"💅",    rating:"4.8", reviews:94,  price:"8 000", plan:"premium", slug:"nails-co-dakar" },
-    { name:"Zen Spa Thiès",        loc:"Centre, Thiès",   cat:"💆‍♀️", rating:"4.7", reviews:63,  price:"12 000",plan:"pro",     slug:"zen-spa-thies" },
-    { name:"Beauté Fatou Diallo",  loc:"HLM, Dakar",      cat:"🧖‍♀️", rating:"4.6", reviews:41,  price:"3 500", plan:"active",  slug:"beaute-fatou-diallo" },
-  ];
-  const planBadge = (p:string) => p==="premium" ? { bg:"rgba(144,96,232,.12)", color:"var(--purple)", text:"★ Premium" } : p==="pro" ? { bg:"rgba(245,166,35,.12)", color:"var(--amber)", text:"⚡ PRO" } : { bg:"rgba(34,211,138,.12)", color:"var(--g2)", text:"● Disponible" };
+  const [salons, setSalons] = useState<Tenant[]>([]);
+
+  useEffect(() => {
+    fetch("/api/tenants?pageSize=4")
+      .then(r => r.json())
+      .then(d => { if (d.data?.tenants) setSalons(d.data.tenants); })
+      .catch(() => {});
+  }, []);
 
   return (
     <>
@@ -21,21 +31,20 @@ export default function LandingPage() {
           <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px)",backgroundSize:"60px 60px",maskImage:"radial-gradient(ellipse at center,black 0%,transparent 70%)"}} />
 
           <div style={{position:"relative",zIndex:1,maxWidth:720,width:"100%"}}>
-            <div className="animate-fadeUp" style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(34,211,138,.08)",border:"1px solid rgba(34,211,138,.18)",color:"var(--g2)",fontSize:11,fontWeight:600,padding:"5px 14px",borderRadius:99,marginBottom:24,letterSpacing:".06em"}}>
+            <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(34,211,138,.08)",border:"1px solid rgba(34,211,138,.18)",color:"var(--g2)",fontSize:11,fontWeight:600,padding:"5px 14px",borderRadius:99,marginBottom:24,letterSpacing:".06em"}}>
               <span style={{width:5,height:5,borderRadius:"50%",background:"var(--g2)",animation:"pulse 2s infinite"}} />
               ✦ Disponible à Dakar, Thiès, Saint-Louis
             </div>
 
-            <h1 className="animate-fadeUp" style={{fontFamily:"var(--serif)",fontSize:"clamp(36px,5.5vw,68px)",fontWeight:800,lineHeight:1.08,letterSpacing:"-.03em",marginBottom:20,animationDelay:".08s"}}>
+            <h1 style={{fontFamily:"var(--serif)",fontSize:"clamp(36px,5.5vw,68px)",fontWeight:800,lineHeight:1.08,letterSpacing:"-.03em",marginBottom:20}}>
               La beauté réservée<br />en <span style={{color:"var(--g2)",fontStyle:"italic"}}>45 secondes</span>.<br /><span style={{color:"var(--text2)"}}>Confirmée sur WhatsApp.</span>
             </h1>
 
-            <p className="animate-fadeUp" style={{fontSize:16,color:"var(--text2)",lineHeight:1.7,maxWidth:520,margin:"0 auto 32px",animationDelay:".14s"}}>
+            <p style={{fontSize:16,color:"var(--text2)",lineHeight:1.7,maxWidth:520,margin:"0 auto 32px"}}>
               Trouvez les meilleurs salons de coiffure, de beauté et de bien-être. Payez par Wave ou Orange Money. Annulez sans frais.
             </p>
 
-            {/* SEARCH */}
-            <div className="animate-fadeUp" style={{background:"var(--card)",border:"1px solid var(--border2)",borderRadius:14,padding:5,display:"flex",flexWrap:"wrap",gap:0,maxWidth:600,width:"100%",margin:"0 auto 16px",animationDelay:".18s"}}>
+            <div style={{background:"var(--card)",border:"1px solid var(--border2)",borderRadius:14,padding:5,display:"flex",flexWrap:"wrap",gap:0,maxWidth:600,width:"100%",margin:"0 auto 16px"}}>
               <div style={{flex:1,minWidth:130,display:"flex",alignItems:"center",gap:8,padding:"9px 13px"}}>
                 <span style={{fontSize:13,color:"var(--text3)"}}>🔍</span>
                 <input placeholder="Coiffure, manucure, massage…" style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"var(--sans)",fontSize:13,color:"var(--text)"}} />
@@ -50,17 +59,13 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* CATEGORY PILLS */}
-            <div className="animate-fadeUp" style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center",marginBottom:28,animationDelay:".22s"}}>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center",marginBottom:28}}>
               {["✦ Tous","💇‍♀️ Coiffure","💅 Manucure","💆‍♀️ Massage","🧖‍♀️ Soins","💄 Maquillage","🧴 Épilation"].map(cat => (
-                <Link key={cat} href={`/salons?cat=${cat}`} style={{padding:"5px 13px",borderRadius:99,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:11,textDecoration:"none",transition:".2s"}}>
-                  {cat}
-                </Link>
+                <Link key={cat} href={`/salons?cat=${cat}`} style={{padding:"5px 13px",borderRadius:99,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:11,textDecoration:"none"}}>{cat}</Link>
               ))}
             </div>
 
-            {/* STATS */}
-            <div className="animate-fadeUp" style={{display:"flex",border:"1px solid var(--border)",borderRadius:14,overflow:"hidden",maxWidth:600,width:"100%",margin:"0 auto",background:"rgba(11,15,22,.8)",backdropFilter:"blur(8px)",animationDelay:".28s"}}>
+            <div style={{display:"flex",border:"1px solid var(--border)",borderRadius:14,overflow:"hidden",maxWidth:600,width:"100%",margin:"0 auto",background:"rgba(11,15,22,.8)",backdropFilter:"blur(8px)"}}>
               {[["14k+","Réservations/mois"],["340+","Salons partenaires"],["4.9★","Note moyenne"],["Wave ✓","+ Orange Money"]].map(([n,l]) => (
                 <div key={l} style={{flex:1,padding:"16px 18px",textAlign:"center",borderRight:"1px solid var(--border)"}}>
                   <div style={{fontFamily:"var(--serif)",fontSize:22,fontWeight:700,color:"var(--g2)",lineHeight:1,marginBottom:3}}>{n}</div>
@@ -71,36 +76,46 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* SALONS */}
+        {/* SALONS EN VEDETTE */}
         <section style={{padding:"48px 5vw",maxWidth:1200,margin:"0 auto"}} id="salons">
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
-            <h2 style={{fontFamily:"var(--serif)",fontSize:20,fontWeight:700}}>Salons en vedette à Dakar</h2>
+            <h2 style={{fontFamily:"var(--serif)",fontSize:20,fontWeight:700}}>Salons en vedette</h2>
             <Link href="/salons" style={{padding:"7px 14px",borderRadius:9,fontSize:12,fontWeight:600,border:"1px solid var(--border2)",color:"var(--text2)",textDecoration:"none"}}>Voir tout →</Link>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
-            {salons.map(s => {
-              const b = planBadge(s.plan);
-              return (
-                <div key={s.slug} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",cursor:"pointer",transition:".25s"}} className="salon-hover">
-                  <div style={{height:140,background:"linear-gradient(135deg,#1a2a1a,#0d2d1a)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40}}>
-                    {s.cat}
-                    <div style={{position:"absolute",top:10,right:10,background:b.bg,color:b.color,fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,border:`1px solid ${b.color}33`}}>{b.text}</div>
-                  </div>
+          {salons.length === 0 ? (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
+              {Array.from({length:4}).map((_,i) => (
+                <div key={i} style={{background:"rgba(255,255,255,.03)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden"}}>
+                  <div style={{height:140,background:"rgba(255,255,255,.05)"}} />
                   <div style={{padding:14}}>
-                    <div style={{fontFamily:"var(--serif)",fontSize:14,fontWeight:600,marginBottom:4}}>{s.name}</div>
-                    <div style={{fontSize:11,color:"var(--text3)",marginBottom:10}}>📍 {s.loc}</div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                      <div style={{fontSize:12,color:"var(--amber)",fontWeight:600}}>★ {s.rating} <span style={{color:"var(--text3)",fontWeight:400}}>({s.reviews} avis)</span></div>
-                      <div style={{fontSize:12,color:"var(--text3)"}}>dès {s.price} FCFA</div>
-                    </div>
-                    <Link href={`/booking/${s.slug}`} style={{display:"block",width:"100%",padding:"8px",borderRadius:9,background:"var(--g)",color:"#fff",fontSize:12,fontWeight:600,textAlign:"center",textDecoration:"none",transition:".2s"}}>
-                      Réserver →
-                    </Link>
+                    <div style={{height:16,width:"60%",background:"rgba(255,255,255,.06)",borderRadius:5,marginBottom:10}} />
+                    <div style={{height:32,background:"rgba(255,255,255,.04)",borderRadius:9}} />
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
+              {salons.map(s => {
+                const b = planBadge(s.plan);
+                return (
+                  <div key={s.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",cursor:"pointer",transition:".25s"}} className="salon-hover">
+                    <div style={{height:140,background:"linear-gradient(135deg,#1a2a1a,#0d2d1a)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40}}>
+                      💇‍♀️
+                      <div style={{position:"absolute",top:10,right:10,background:b.bg,color:b.color,fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,border:`1px solid ${b.color}33`}}>{b.text}</div>
+                    </div>
+                    <div style={{padding:14}}>
+                      <div style={{fontFamily:"var(--serif)",fontSize:14,fontWeight:600,marginBottom:4}}>{s.name}</div>
+                      {s.city && <div style={{fontSize:11,color:"var(--text3)",marginBottom:10}}>📍 {s.city}</div>}
+                      <Link href={`/booking/${s.slug}`} style={{display:"block",width:"100%",padding:"8px",borderRadius:9,background:"var(--g)",color:"#fff",fontSize:12,fontWeight:600,textAlign:"center",textDecoration:"none",transition:".2s"}}>
+                        Réserver →
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* HOW IT WORKS */}
@@ -127,7 +142,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* CTA BOTTOM */}
+        {/* CTA */}
         <section style={{padding:"60px 5vw",textAlign:"center"}}>
           <div style={{maxWidth:600,margin:"0 auto",background:"var(--card)",border:"1px solid var(--border2)",borderRadius:24,padding:"48px 32px"}}>
             <h2 style={{fontFamily:"var(--serif)",fontSize:"clamp(24px,4vw,40px)",fontWeight:800,marginBottom:12,letterSpacing:"-.02em"}}>Votre prochain rendez-vous <span style={{color:"var(--g2)",fontStyle:"italic"}}>vous attend là</span></h2>

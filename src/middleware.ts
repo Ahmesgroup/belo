@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify, SignJWT } from "jose";
 
-export async function middleware(_req: NextRequest) {
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // Protect admin API routes — valid JWT required
+  if (pathname.startsWith("/api/admin")) {
+    const token = req.headers.get("authorization")?.replace("Bearer ", "").trim();
+    if (!token) {
+      return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
+    }
+    try {
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "");
+      await jwtVerify(token, secret);
+    } catch {
+      return NextResponse.json({ error: { code: "TOKEN_INVALID" } }, { status: 401 });
+    }
+  }
+
   return NextResponse.next();
 }
 
