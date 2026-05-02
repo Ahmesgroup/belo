@@ -31,7 +31,8 @@ export default function LoginPage() {
       localStorage.setItem("belo_token", data.data.accessToken);
       localStorage.setItem("belo_user", JSON.stringify(data.data.user));
       const role = data.data.user.role;
-      const dest = (role === "SUPER_ADMIN" || role === "ADMIN") ? "/admin" : (role === "OWNER" || role === "STAFF") ? "/dashboard" : "/profil";
+      const redirectParam = new URLSearchParams(window.location.search).get("redirect");
+      const dest = redirectParam ?? ((role === "SUPER_ADMIN" || role === "ADMIN") ? "/admin" : (role === "OWNER" || role === "STAFF") ? "/dashboard" : "/profil");
       window.location.replace(dest);
     } catch { setError("Erreur reseau"); } finally { setLoading(false); }
   }

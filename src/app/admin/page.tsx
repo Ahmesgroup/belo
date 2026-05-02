@@ -2,14 +2,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-const TENANTS = [
-  { name:"Studio Élégance", loc:"Plateau · Dakar",  plan:"PREMIUM", status:"active",  revenue:"847 200", bookings:312, health:92, mrrContrib:"35 000" },
-  { name:"Zen Massage",     loc:"Almadies · Dakar", plan:"PREMIUM", status:"active",  revenue:"1 340 000",bookings:267, health:88, mrrContrib:"35 000" },
-  { name:"Golden Touch",    loc:"Point-E · Dakar",  plan:"PRO",     status:"fraud",   revenue:"2 100 000",bookings:341, health:12, mrrContrib:"15 000" },
-  { name:"Bella Coiffure",  loc:"Mermoz · Dakar",   plan:"FREE",    status:"pending", revenue:"96 000",   bookings:12,  health:51, mrrContrib:"0" },
-  { name:"Espace Sérénité", loc:"Fann · Dakar",     plan:"PRO",     status:"blocked", revenue:"—",        bookings:0,   health:8,  mrrContrib:"0" },
-  { name:"Luxe Beauty",     loc:"Ouakam · Dakar",   plan:"PREMIUM", status:"active",  revenue:"546 000",  bookings:178, health:84, mrrContrib:"35 000" },
-];
 
 const VIEWS = ["Mission Control","Tenants","Plans","Fraude","Équipe","Logs","Réglages"];
 

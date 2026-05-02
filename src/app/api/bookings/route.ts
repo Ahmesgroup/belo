@@ -13,6 +13,7 @@ import { createBooking, getTenantBookings } from "@/services/booking.service";
 import { withAuth, withTenant } from "@/middleware";
 import { AppError } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
+import { prisma } from "@/infrastructure/db/prisma";
 
 // ── VALIDATION SCHEMA ─────────────────────────────────────────
 
@@ -133,6 +134,25 @@ export async function GET(req: NextRequest) {
 
     // Query params
     const { searchParams } = new URL(req.url);
+
+    // userId path — client profile history tab
+    const userId = searchParams.get("userId");
+    if (userId) {
+      if (auth.userId !== userId && auth.role !== "ADMIN" && auth.role !== "SUPER_ADMIN") {
+        return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
+      }
+      const bookings = await prisma.booking.findMany({
+        where: { userId },
+        select: {
+          id: true, status: true, createdAt: true,
+          service: { select: { name: true, priceCents: true } },
+          slot:    { select: { startsAt: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
+      return NextResponse.json({ data: { bookings, pagination: { total: bookings.length } } });
+    }
 
     // Tenant — header (middleware) ou query param (client direct)
     const tenantId = req.headers.get("x-tenant-id") ?? searchParams.get("tenantId");

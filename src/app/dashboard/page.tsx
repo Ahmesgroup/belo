@@ -26,13 +26,26 @@ export default function DashboardPage() {
     const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
     if (!token || !user?.tenantId) { setLoading(false); return; }
 
+    const QUOTAS: Record<string, number> = { FREE: 20, PRO: 500, PREMIUM: Infinity };
+
+    // Fetch tenant for plan + bookingsUsedMonth
+    fetch(`/api/tenants/${user.tenantId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.data?.plan)              setQuota(QUOTAS[d.data.plan] ?? 20);
+        if (d.data?.bookingsUsedMonth) setUsed(d.data.bookingsUsedMonth);
+      })
+      .catch(() => {});
+
+    // Fetch bookings
     fetch(`/api/bookings?tenantId=${user.tenantId}&pageSize=20`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
       .then(d => {
         if (d.data?.bookings) setBookings(d.data.bookings);
-        if (d.data?.pagination?.total) setUsed(d.data.pagination.total);
       })
       .catch(() => {})
       .finally(() => setLoading(false));

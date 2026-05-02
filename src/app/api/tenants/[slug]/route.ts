@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
+import { withAuth, withRole } from "@/middleware";
 import { handleRouteError, AppErrors } from "@/shared/errors";
 
 export async function GET(
@@ -13,20 +15,21 @@ export async function GET(
         status: "ACTIVE",
       },
       select: {
-        id:             true,
-        name:           true,
-        slug:           true,
-        phone:          true,
-        whatsapp:       true,
-        email:          true,
-        address:        true,
-        city:           true,
-        country:        true,
-        photos:         true,
-        plan:           true,
-        socials:        true,
-        depositEnabled: true,
-        depositPercent: true,
+        id:                true,
+        name:              true,
+        slug:              true,
+        phone:             true,
+        whatsapp:          true,
+        email:             true,
+        address:           true,
+        city:              true,
+        country:           true,
+        photos:            true,
+        plan:              true,
+        socials:           true,
+        depositEnabled:    true,
+        depositPercent:    true,
+        bookingsUsedMonth: true,
         services: {
           where:   { isActive: true },
           select: {
@@ -49,8 +52,54 @@ export async function GET(
 
     return NextResponse.json(
       { data: tenant },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" } }
+      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30" } }
     );
+  } catch (err) {
+    return handleRouteError(err);
+  }
+}
+
+const PatchSchema = z.object({
+  name:    z.string().min(2).max(100).optional(),
+  phone:   z.string().optional(),
+  address: z.string().optional(),
+  city:    z.string().optional(),
+  email:   z.string().email().optional(),
+}).partial();
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { slug: string } }
+) {
+  try {
+    const auth = await withAuth(req);
+    const roleCheck = withRole(auth, ["OWNER", "STAFF", "ADMIN", "SUPER_ADMIN"]);
+    if (!roleCheck.ok) return roleCheck.response;
+
+    const raw = await req.json().catch(() => null);
+    if (!raw) return NextResponse.json({ error: { code: "INVALID_JSON" } }, { status: 400 });
+
+    const parsed = PatchSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: { code: "VALIDATION_ERROR", fields: parsed.error.flatten().fieldErrors } },
+        { status: 422 }
+      );
+    }
+
+    const existing = await prisma.tenant.findFirst({
+      where: { OR: [{ id: params.slug }, { slug: params.slug }] },
+      select: { id: true },
+    });
+    if (!existing) return NextResponse.json(AppErrors.TENANT_NOT_FOUND().toJSON(), { status: 404 });
+
+    const updated = await prisma.tenant.update({
+      where:  { id: existing.id },
+      data:   parsed.data,
+      select: { id: true, name: true, slug: true, plan: true, updatedAt: true },
+    });
+
+    return NextResponse.json({ data: updated });
   } catch (err) {
     return handleRouteError(err);
   }

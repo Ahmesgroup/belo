@@ -34,7 +34,7 @@ export default function ProfilPage() {
     setBLoading(true);
     const token = localStorage.getItem("belo_token");
     const u: User | null = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    const query = u?.tenantId ? `?tenantId=${u.tenantId}` : "";
+    const query = u?.id ? `?userId=${u.id}` : "";
     fetch(`/api/bookings${query}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })

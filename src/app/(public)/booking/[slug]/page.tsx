@@ -78,13 +78,17 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
 
   async function confirmBooking() {
     if (!tenant || !svc || !slot) return;
+    const token = localStorage.getItem("belo_token");
+    if (!token) {
+      window.location.href = `/login?redirect=/booking/${params.slug}`;
+      return;
+    }
     setBooking(true); setBookingErr("");
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("belo_token") : null;
       const providerMap: Record<string, string> = { wave:"wave", orange:"orange_money", stripe:"stripe" };
       const res = await fetch("/api/bookings", {
         method: "POST",
-        headers: { "Content-Type":"application/json", ...(token ? { Authorization:`Bearer ${token}` } : {}) },
+        headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}` },
         body: JSON.stringify({
           serviceId:       svc.id,
           slotId:          slot.id,
