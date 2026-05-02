@@ -17,12 +17,19 @@ export default function AdminPage() {
   const [view, setView] = useState(0);
   const [toasts, setToasts] = useState<{id:number;msg:string}[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
+  const [stats,   setStats]   = useState<Record<string,number>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/admin/tenants")
+    const token = typeof window !== "undefined" ? localStorage.getItem("belo_token") : null;
+    fetch("/api/admin/tenants", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then(r => r.json())
-      .then(d => { if (d.data?.tenants) setTenants(d.data.tenants); })
+      .then(d => {
+        if (d.data?.tenants) setTenants(d.data.tenants);
+        if (d.data?.stats)   setStats(d.data.stats);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -118,11 +125,11 @@ export default function AdminPage() {
 
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
                 {[
-                  { lbl:"MRR Plateforme", val:"32.4M", delta:"↑ +8.2%", color:"var(--g2)" },
-                  { lbl:"Bookings (30j)",  val:"14.2k", delta:"↑ +18%",   color:"var(--amber)" },
-                  { lbl:"Churn Rate",      val:"3.2%",  delta:"↑ +0.4% ⚠",color:"var(--red)" },
-                  { lbl:"ARPU moyen",      val:"95k F", delta:"↑ +12%",   color:"var(--text)" },
-                  { lbl:"Tenants actifs",  val:"340",   delta:"↑ +12 ce mois",color:"var(--blue)" },
+                  { lbl:"MRR Plateforme", val:"—", delta:"À venir", color:"var(--g2)" },
+                  { lbl:"Bookings (30j)",  val:"—", delta:"À venir", color:"var(--amber)" },
+                  { lbl:"Tenants ACTIFS", val:loading?"…":String(stats.ACTIVE ?? tenants.filter(t=>t.status==="ACTIVE").length), delta:"en temps réel", color:"var(--g2)" },
+                  { lbl:"En attente",     val:loading?"…":String(stats.PENDING ?? tenants.filter(t=>t.status==="PENDING").length), delta:"validation requise", color:"var(--amber)" },
+                  { lbl:"Total salons",   val:loading?"…":String(Object.values(stats).reduce((a:number,b)=>a+(b as number),0) || tenants.length), delta:"inscrits", color:"var(--blue)" },
                 ].map(k => (
                   <div key={k.lbl} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:13}}>
                     <div style={{fontSize:9,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:7}}>{k.lbl}</div>

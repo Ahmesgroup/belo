@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     const parsed = GetSlotsSchema.safeParse({
       tenantId:  searchParams.get("tenantId"),
       serviceId: searchParams.get("serviceId") ?? undefined,
-      date:      searchParams.get("date"),
+      date:      searchParams.get("date") ?? undefined,
     });
 
     if (!parsed.success) {
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
       : new Date();
     const dayEnd = date
       ? new Date(`${date}T23:59:59.999Z`)
-      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
     // Requête optimisée — projection minimale + index utilisé
     const slots = await prisma.slot.findMany({

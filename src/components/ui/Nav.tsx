@@ -1,8 +1,27 @@
 "use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export function PublicNav() {
+  const [user, setUser] = useState<{ name?: string; role?: string } | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("belo_user");
+      if (stored) setUser(JSON.parse(stored));
+    } catch {}
+  }, []);
+
+  function logout() {
+    localStorage.removeItem("belo_user");
+    localStorage.removeItem("belo_token");
+    setUser(null);
+    window.location.href = "/";
+  }
+
+  const initial = user?.name?.charAt(0).toUpperCase() ?? "?";
+
   return (
     <>
       <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:500,background:"rgba(6,9,13,.96)",backdropFilter:"blur(20px)",borderBottom:"1px solid var(--border)",padding:"0 5vw"}}>
@@ -18,9 +37,21 @@ export function PublicNav() {
             ))}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:12}}>
-            <Link href="/login" style={{padding:"7px 16px",borderRadius:9,fontSize:12,fontWeight:600,background:"transparent",border:"1px solid var(--border2)",color:"var(--text2)",textDecoration:"none"}}>
-              Connexion
-            </Link>
+            {user ? (
+              <>
+                <Link href="/profil" style={{display:"flex",alignItems:"center",gap:7,padding:"5px 12px",borderRadius:9,fontSize:12,fontWeight:600,background:"rgba(34,211,138,.1)",border:"1px solid rgba(34,211,138,.2)",color:"var(--g2)",textDecoration:"none"}}>
+                  <span style={{width:22,height:22,borderRadius:"50%",background:"var(--g2)",color:"#111",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{initial}</span>
+                  Mon compte
+                </Link>
+                <button onClick={logout} style={{padding:"7px 14px",borderRadius:9,fontSize:12,fontWeight:600,background:"transparent",border:"1px solid var(--border2)",color:"var(--text3)",cursor:"pointer"}}>
+                  Déconnexion
+                </button>
+              </>
+            ) : (
+              <Link href="/login" style={{padding:"7px 16px",borderRadius:9,fontSize:12,fontWeight:600,background:"transparent",border:"1px solid var(--border2)",color:"var(--text2)",textDecoration:"none"}}>
+                Connexion
+              </Link>
+            )}
             <Link href="/salons" style={{padding:"7px 16px",borderRadius:9,fontSize:12,fontWeight:600,background:"var(--g)",color:"#fff",textDecoration:"none"}}>
               Réserver →
             </Link>

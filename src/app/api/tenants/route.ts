@@ -83,6 +83,7 @@ export async function GET(req: NextRequest) {
       status: "ACTIVE" as const,
       ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}),
       ...(plan ? { plan: plan as any } : {}),
+      ...(category ? { services: { some: { category: category as string, isActive: true } } } : {}),
       ...(search ? {
         OR: [
           { name:    { contains: search, mode: "insensitive" as const } },

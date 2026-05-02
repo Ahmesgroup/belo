@@ -131,17 +131,17 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Tenant
-    const tenantId = req.headers.get("x-tenant-id");
+    // Query params
+    const { searchParams } = new URL(req.url);
+
+    // Tenant — header (middleware) ou query param (client direct)
+    const tenantId = req.headers.get("x-tenant-id") ?? searchParams.get("tenantId");
     if (!tenantId) {
       return NextResponse.json(
         { error: { code: "MISSING_TENANT", message: "Contexte salon manquant." } },
         { status: 400 }
       );
     }
-
-    // Query params
-    const { searchParams } = new URL(req.url);
     const parsed = GetBookingsSchema.safeParse({
       status:   searchParams.get("status") ?? undefined,
       date:     searchParams.get("date") ?? undefined,

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://belo-khaki.vercel.app/sitemap.xml
