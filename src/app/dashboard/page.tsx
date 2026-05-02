@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const [loading,  setLoading]  = useState(true);
   const [used,     setUsed]     = useState(0);
   const [quota,    setQuota]    = useState(20);
+  const [plan,     setPlan]     = useState("FREE");
 
   useEffect(() => {
     const token = localStorage.getItem("belo_token");
@@ -34,7 +35,7 @@ export default function DashboardPage() {
     })
       .then(r => r.json())
       .then(d => {
-        if (d.data?.plan)              setQuota(QUOTAS[d.data.plan] ?? 20);
+        if (d.data?.plan)              { setQuota(QUOTAS[d.data.plan] ?? 20); setPlan(d.data.plan); }
         if (d.data?.bookingsUsedMonth) setUsed(d.data.bookingsUsedMonth);
       })
       .catch(() => {});
@@ -72,7 +73,7 @@ export default function DashboardPage() {
         </div>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--amber)"}}>
           <span>{used} utilisés</span>
-          <Link href="/plans" style={{color:"var(--g2)",textDecoration:"none",fontWeight:700}}>Passer à Pro →</Link>
+          {plan === "FREE" && <Link href="/plans" style={{color:"var(--g2)",textDecoration:"none",fontWeight:700}}>Passer à Pro →</Link>}
         </div>
       </div>
 
@@ -117,11 +118,13 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div style={{textAlign:"center"}}>
-        <Link href="/plans" style={{padding:"10px 20px",borderRadius:10,background:"var(--g)",color:"#fff",fontFamily:"var(--serif)",fontSize:13,fontWeight:700,textDecoration:"none"}}>
-          🚀 Passer à Pro
-        </Link>
-      </div>
+      {plan === "FREE" && (
+        <div style={{textAlign:"center"}}>
+          <Link href="/plans" style={{padding:"10px 20px",borderRadius:10,background:"var(--g)",color:"#fff",fontFamily:"var(--serif)",fontSize:13,fontWeight:700,textDecoration:"none"}}>
+            🚀 Passer à Pro
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

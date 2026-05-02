@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { DashboardNav } from "@/components/ui/Nav";
+import { fetchWithRetry } from "@/lib/fetch-with-retry";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [plan, setPlan] = useState<"FREE" | "PRO" | "PREMIUM">("FREE");
@@ -9,7 +10,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const token = localStorage.getItem("belo_token");
     const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
     if (!token || !user?.tenantId) return;
-    fetch(`/api/tenants/${user.tenantId}`, { headers: { Authorization: `Bearer ${token}` } })
+    fetchWithRetry(`/api/tenants/${user.tenantId}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.data?.plan) setPlan(d.data.plan as "FREE" | "PRO" | "PREMIUM"); })
       .catch(() => {});

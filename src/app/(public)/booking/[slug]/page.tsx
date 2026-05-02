@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type Service = { id: string; name: string; category: string; priceCents: number; durationMin: number; photos: string[] };
 type Slot    = { id: string; startsAt: string; endsAt: string; isAvailable: boolean };
-type Tenant  = { id: string; name: string; slug: string; city: string | null; plan: string; depositEnabled: boolean; depositPercent: number; services: Service[] };
+type Tenant  = { id: string; name: string; slug: string; city: string | null; plan: string; depositEnabled: boolean; depositPercent: number; services: Service[]; _count?: { bookings: number } };
 
 const ICONS: Record<string, string> = { hair:"💇‍♀️", HAIR:"💇‍♀️", nails:"💅", NAILS:"💅", massage:"💆‍♀️", MASSAGE:"💆‍♀️", barber:"✂️", BARBER:"✂️", spa:"🧖‍♀️", SPA:"🧖‍♀️", other:"✦", OTHER:"✦", beauty:"🧴", BEAUTY:"🧴", makeup:"💄", MAKEUP:"💄" };
 const icon = (cat: string) => ICONS[cat] ?? "✦";
@@ -32,7 +32,13 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
   const [svc,        setSvc]        = useState<Service | null>(null);
   const [slot,       setSlot]       = useState<Slot | null>(null);
   const [dateStr,    setDateStr]    = useState(dates[0].dateStr);
-  const [phone,      setPhone]      = useState("");
+  const [phone,      setPhone]      = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const user = JSON.parse(localStorage.getItem("belo_user") ?? "{}");
+      return (user.phone ?? "").replace(/^\+221/, "");
+    } catch { return ""; }
+  });
   const [note,       setNote]       = useState("");
   const [payMethod,  setPayMethod]  = useState("wave");
   const [booking,    setBooking]    = useState<boolean>(false);
@@ -145,10 +151,23 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
       <main style={{paddingTop:56}}>
         <div style={{maxWidth:760,margin:"0 auto",padding:"32px 20px 60px"}}>
 
-          <div style={{marginBottom:28}}>
-            <Link href="/salons" style={{fontSize:12,color:"var(--text3)",textDecoration:"none",marginBottom:8,display:"block"}}>← Retour aux salons</Link>
-            <h2 style={{fontFamily:"var(--serif)",fontSize:22,fontWeight:700,marginBottom:4}}>{tenant.name}</h2>
-            {tenant.city && <p style={{fontSize:13,color:"var(--text2)"}}>{tenant.city}</p>}
+          <Link href="/salons" style={{fontSize:12,color:"var(--text3)",textDecoration:"none",marginBottom:16,display:"block"}}>← Retour aux salons</Link>
+
+          {/* Salon header card */}
+          <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",marginBottom:24}}>
+            <div style={{height:120,background:"linear-gradient(135deg,#0d2d1a,#1a3a2a)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48,position:"relative"}}>
+              💇‍♀️
+              <div style={{position:"absolute",bottom:10,left:14,background:"rgba(0,0,0,.5)",borderRadius:99,padding:"3px 10px",fontSize:10,color:"#fff",fontWeight:600}}>
+                ★ {(tenant._count?.bookings ?? 0) > 0 ? "4.8" : "Nouveau"} · {tenant._count?.bookings ?? 0} réservation{(tenant._count?.bookings ?? 0) !== 1 ? "s" : ""}
+              </div>
+            </div>
+            <div style={{padding:"12px 16px"}}>
+              <div style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,marginBottom:2}}>{tenant.name}</div>
+              {tenant.city && <div style={{fontSize:12,color:"var(--text3)",marginBottom:6}}>📍 {tenant.city}</div>}
+              <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.5}}>
+                {tenant.services.length} service{tenant.services.length !== 1 ? "s" : ""} disponible{tenant.services.length !== 1 ? "s" : ""} · Confirmation WhatsApp instantanée
+              </div>
+            </div>
           </div>
 
           {/* Step tabs */}

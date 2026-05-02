@@ -4,13 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export function PublicNav() {
-  const [user, setUser] = useState<{ name?: string; role?: string } | null>(null);
+  const [user,     setUser]     = useState<{ name?: string; role?: string } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem("belo_user");
       if (stored) setUser(JSON.parse(stored));
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   function logout() {
@@ -20,7 +28,14 @@ export function PublicNav() {
     window.location.href = "/";
   }
 
-  const initial = user?.name?.charAt(0).toUpperCase() ?? "?";
+  const initial      = user?.name?.charAt(0).toUpperCase() ?? "?";
+  const role         = user?.role ?? "";
+  const destAccount  = role === "OWNER" || role === "STAFF" ? "/dashboard"
+    : role === "SUPER_ADMIN" || role === "ADMIN" ? "/admin"
+    : "/profil";
+  const accountLabel = role === "OWNER" || role === "STAFF" ? "Mon dashboard"
+    : role === "SUPER_ADMIN" || role === "ADMIN" ? "Admin"
+    : "Mon compte";
 
   return (
     <>
@@ -29,19 +44,22 @@ export function PublicNav() {
           <Link href="/" style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,color:"var(--text)",textDecoration:"none",marginRight:32,whiteSpace:"nowrap"}}>
             belo<span style={{color:"var(--g2)"}}>.</span>
           </Link>
-          <div style={{display:"flex",gap:4,flex:1,overflowX:"auto",scrollbarWidth:"none"}}>
-            {[["Découvrir","/salons"],["Comment ça marche","/#how"],["Pour les salons","/plans"]].map(([label,href]) => (
-              <Link key={href} href={href} style={{padding:"6px 12px",borderRadius:8,fontSize:12,color:"var(--text3)",textDecoration:"none",transition:".2s",whiteSpace:"nowrap"}}>
-                {label}
-              </Link>
-            ))}
-          </div>
+          {!isMobile && (
+            <div style={{display:"flex",gap:4,flex:1,overflowX:"auto",scrollbarWidth:"none"}}>
+              {[["Découvrir","/salons"],["Comment ça marche","/#how"],["Pour les salons","/plans"]].map(([label,href]) => (
+                <Link key={href} href={href} style={{padding:"6px 12px",borderRadius:8,fontSize:12,color:"var(--text3)",textDecoration:"none",transition:".2s",whiteSpace:"nowrap"}}>
+                  {label}
+                </Link>
+              ))}
+            </div>
+          )}
+          {isMobile && <div style={{flex:1}} />}
           <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:12}}>
             {user ? (
               <>
-                <Link href="/profil" style={{display:"flex",alignItems:"center",gap:7,padding:"5px 12px",borderRadius:9,fontSize:12,fontWeight:600,background:"rgba(34,211,138,.1)",border:"1px solid rgba(34,211,138,.2)",color:"var(--g2)",textDecoration:"none"}}>
+                <Link href={destAccount} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 12px",borderRadius:9,fontSize:12,fontWeight:600,background:"rgba(34,211,138,.1)",border:"1px solid rgba(34,211,138,.2)",color:"var(--g2)",textDecoration:"none"}}>
                   <span style={{width:22,height:22,borderRadius:"50%",background:"var(--g2)",color:"#111",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{initial}</span>
-                  Mon compte
+                  {!isMobile && accountLabel}
                 </Link>
                 <button onClick={logout} style={{padding:"7px 14px",borderRadius:9,fontSize:12,fontWeight:600,background:"transparent",border:"1px solid var(--border2)",color:"var(--text3)",cursor:"pointer"}}>
                   Déconnexion

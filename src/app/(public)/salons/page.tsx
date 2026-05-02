@@ -54,29 +54,42 @@ function SkeletonGrid() {
 }
 
 export default function SalonsPage() {
-  const [category, setCategory] = useState("Tous");
-  const [tenants,  setTenants]  = useState<Tenant[]>([]);
-  const [total,    setTotal]    = useState(0);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState("");
+  const [category,        setCategory]        = useState("Tous");
+  const [search,          setSearch]          = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [tenants,         setTenants]         = useState<Tenant[]>([]);
+  const [total,           setTotal]           = useState(0);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState("");
 
-  // Read ?cat= from URL on mount and apply as initial filter
+  // Read ?cat= and ?search= from URL on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
+      const params  = new URLSearchParams(window.location.search);
       const initial = resolveInitialCat(params.get("cat"));
       if (initial !== "Tous") setCategory(initial);
+      const s = params.get("search");
+      if (s) { setSearch(s); setDebouncedSearch(s); }
     }
   }, []);
 
-  // Re-fetch whenever category changes
+  // Debounce search input 300ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Re-fetch whenever category or debouncedSearch changes
   useEffect(() => {
     setLoading(true);
     setError("");
-    const catParam = category !== "Tous" && CAT_MAP[category]
+    const catParam    = category !== "Tous" && CAT_MAP[category]
       ? `&category=${encodeURIComponent(CAT_MAP[category])}`
       : "";
-    fetch(`/api/tenants?page=1&pageSize=20${catParam}`)
+    const searchParam = debouncedSearch.trim()
+      ? `&search=${encodeURIComponent(debouncedSearch.trim())}`
+      : "";
+    fetch(`/api/tenants?page=1&pageSize=20${catParam}${searchParam}`)
       .then(r => r.json())
       .then(d => {
         if (d.data?.tenants) {
@@ -86,7 +99,7 @@ export default function SalonsPage() {
       })
       .catch(() => setError("Erreur réseau. Veuillez réessayer."))
       .finally(() => setLoading(false));
-  }, [category]);
+  }, [category, debouncedSearch]);
 
   return (
     <>
@@ -103,6 +116,18 @@ export default function SalonsPage() {
               ? ""
               : `${total > 0 ? total : tenants.length} salon${(total || tenants.length) !== 1 ? "s" : ""} disponible${(total || tenants.length) !== 1 ? "s" : ""} · Réservation en 45 secondes`}
           </p>
+
+          {/* Search input */}
+          <div style={{position:"relative",marginBottom:16}}>
+            <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"var(--text3)",pointerEvents:"none"}}>🔍</span>
+            <input
+              type="text"
+              placeholder="Rechercher un salon ou une ville…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{paddingLeft:38,width:"100%",padding:"10px 12px 10px 38px",borderRadius:12,border:"1px solid var(--border2)",background:"var(--card)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}}
+            />
+          </div>
 
           {/* Category filters */}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:24}}>
