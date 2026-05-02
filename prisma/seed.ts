@@ -133,21 +133,26 @@ async function main() {
   for (const slug of Object.keys(tenantMap)) {
     const tenantId = tenantMap[slug];
     const svcs = await prisma.service.findMany({ where:{ tenantId }, select:{ id:true, durationMin:true } });
+    // Delete expired/old slots before regenerating
+    await prisma.slot.deleteMany({
+      where: { tenantId, startsAt: { gt: new Date() }, isAvailable: true },
+    });
+
     const slots: { tenantId:string; serviceId:string; startsAt:Date; endsAt:Date; isAvailable:boolean }[] = [];
     const now = new Date();
 
     for (let d = 1; d <= 14; d++) {
       const date = new Date(now);
-      date.setDate(date.getDate() + d);
-      if (date.getDay() === 0) continue;
+      date.setUTCDate(date.getUTCDate() + d);
+      if (date.getUTCDay() === 0) continue; // skip Sunday
 
       for (let h = 9; h < 18; h++) {
         if (h === 12 || h === 13) continue;
         for (let si = 0; si < svcs.length; si++) {
           const svc = svcs[si];
-          const st = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, 0, 0);
+          const st = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), h, 0, 0));
           const en = new Date(st.getTime() + svc.durationMin * 60000);
-          if (en.getHours() > 18) continue;
+          if (en.getUTCHours() > 18) continue;
           slots.push({ tenantId, serviceId: svc.id, startsAt: st, endsAt: en, isAvailable: true });
         }
       }

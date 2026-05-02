@@ -51,6 +51,7 @@ export default function DashboardProfilPage() {
       });
       if (!res.ok) { const d = await res.json(); setError(d.error?.message ?? "Erreur."); return; }
       setSaved(true);
+      window.dispatchEvent(new CustomEvent("tenant-updated"));
       setTimeout(() => setSaved(false), 2500);
     } catch { setError("Erreur réseau."); }
     finally { setSaving(false); }

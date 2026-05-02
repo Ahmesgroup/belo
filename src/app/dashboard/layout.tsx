@@ -1,11 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardNav } from "@/components/ui/Nav";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [plan, setPlan] = useState<"FREE" | "PRO" | "PREMIUM">("FREE");
 
-  useEffect(() => {
+  const fetchTenant = useCallback(() => {
     const token = localStorage.getItem("belo_token");
     const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
     if (!token || !user?.tenantId) return;
@@ -14,6 +14,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then(d => { if (d.data?.plan) setPlan(d.data.plan as "FREE" | "PRO" | "PREMIUM"); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchTenant();
+    window.addEventListener("tenant-updated", fetchTenant);
+    return () => window.removeEventListener("tenant-updated", fetchTenant);
+  }, [fetchTenant]);
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>

@@ -49,6 +49,7 @@ export default function ServicesPage() {
       if (!res.ok) { setSaveErr(data.error?.message ?? "Erreur."); return; }
       setServices(s => s.map(x => x.id === id ? { ...x, ...data.data } : x));
       setEditId(null);
+      window.dispatchEvent(new CustomEvent("tenant-updated"));
     } catch { setSaveErr("Erreur réseau."); }
     finally { setSaving(false); }
   }
