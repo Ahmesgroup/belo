@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <head>
-        <script dangerouslySetInnerHTML={{__html:`try{var t=localStorage.getItem('belo_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}`}} />
+        <script dangerouslySetInnerHTML={{__html:`try{var t=localStorage.getItem('belo_theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}`}} />
       </head>
       <body>{children}</body>
     </html>

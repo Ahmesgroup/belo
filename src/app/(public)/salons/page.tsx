@@ -7,7 +7,8 @@ type Tenant = {
   id: string; name: string; slug: string;
   city: string | null; country: string;
   address: string | null; photos: string[];
-  plan: string; _count: { bookings: number };
+  coverUrl: string | null; plan: string;
+  _count: { bookings: number };
 };
 
 const PLAN_BADGE: Record<string, { bg: string; color: string; text: string }> = {
@@ -181,8 +182,16 @@ export default function SalonsPage() {
                 const badge = PLAN_BADGE[s.plan] ?? PLAN_BADGE.FREE;
                 return (
                   <div key={s.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",cursor:"pointer",transition:".25s"}}>
-                    <div style={{height:150,background:"linear-gradient(135deg,#1a2a1a,#0d2d1a)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48,position:"relative"}}>
-                      💇‍♀️
+                    <div style={{height:160,background:"var(--card2)",overflow:"hidden",position:"relative"}}>
+                      {s.coverUrl ? (
+                        <img src={s.coverUrl} alt={s.name} style={{width:"100%",height:"100%",objectFit:"cover",transition:"transform .3s"}}
+                          onMouseEnter={e=>(e.currentTarget.style.transform="scale(1.04)")}
+                          onMouseLeave={e=>(e.currentTarget.style.transform="scale(1)")} />
+                      ) : (
+                        <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,var(--card2),var(--card))"}}>
+                          <span style={{fontSize:48}}>💇‍♀️</span>
+                        </div>
+                      )}
                       {s.plan !== "FREE" && (
                         <span style={{position:"absolute",top:10,right:10,background:badge.bg,color:badge.color,fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:99}}>
                           {badge.text}

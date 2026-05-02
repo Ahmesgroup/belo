@@ -1,9 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useLang } from "@/hooks/useLang";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export function PublicNav() {
+  const { lang, setLang } = useLang();
   const [user,     setUser]     = useState<{ name?: string; role?: string } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -28,10 +30,10 @@ export function PublicNav() {
     window.location.href = "/";
   }
 
-  const [theme, setTheme] = useState<"dark"|"light">("dark");
+  const [theme, setTheme] = useState<"dark"|"light">("light");
 
   useEffect(() => {
-    const saved = (localStorage.getItem("belo_theme") ?? "dark") as "dark"|"light";
+    const saved = (localStorage.getItem("belo_theme") ?? "light") as "dark"|"light";
     setTheme(saved);
     document.documentElement.setAttribute("data-theme", saved);
   }, []);
@@ -54,7 +56,7 @@ export function PublicNav() {
 
   return (
     <>
-      <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:500,background:"rgba(6,9,13,.96)",backdropFilter:"blur(20px)",borderBottom:"1px solid var(--border)",padding:"0 5vw"}}>
+      <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:500,background:"var(--nav-bg)",backdropFilter:"blur(20px)",borderBottom:"1px solid var(--border)",padding:"0 5vw"}}>
         <div style={{display:"flex",alignItems:"center",height:56,maxWidth:1200,margin:"0 auto",gap:0}}>
           <Link href="/" style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,color:"var(--text)",textDecoration:"none",marginRight:32,whiteSpace:"nowrap"}}>
             belo<span style={{color:"var(--g2)"}}>.</span>
@@ -73,6 +75,10 @@ export function PublicNav() {
             <button onClick={toggleTheme} title={theme==="dark"?"Mode clair":"Mode sombre"}
               style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 9px",fontSize:14,cursor:"pointer",color:"var(--text2)",lineHeight:1,flexShrink:0}}>
               {theme==="dark" ? "☀️" : "🌙"}
+            </button>
+            <button onClick={()=>setLang(lang==="fr"?"en":"fr")} title="Change language"
+              style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:8,padding:"5px 9px",fontSize:12,fontWeight:600,cursor:"pointer",color:"var(--text2)",lineHeight:1,flexShrink:0,minWidth:38}}>
+              {lang==="fr"?"EN":"FR"}
             </button>
             {user ? (
               <>

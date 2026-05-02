@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
           country:     true,
           address:     true,
           photos:      true,
+          coverUrl:    true,
           plan:        true,
           _count: {
             select: {
