@@ -24,10 +24,7 @@ import { rateLimit } from "@/lib/rate-limit";
 const GetSlotsSchema = z.object({
   tenantId:  z.string().cuid("Salon invalide"),
   serviceId: z.string().cuid("Service invalide").optional(),
-  date:      z.string().regex(
-    /^\d{4}-\d{2}-\d{2}$/,
-    "Format date attendu : YYYY-MM-DD"
-  ),
+  date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format date attendu : YYYY-MM-DD").optional(),
 });
 
 // Pour générer des créneaux en masse (gérant)
@@ -75,10 +72,13 @@ export async function GET(req: NextRequest) {
 
     const { tenantId, serviceId, date } = parsed.data;
 
-    // Construire la fenêtre temporelle pour le jour demandé
-    // On travaille en UTC — le frontend envoie la date locale
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd   = new Date(`${date}T23:59:59.999Z`);
+    // Fenêtre temporelle : date spécifique ou 7 prochains jours
+    const dayStart = date
+      ? new Date(`${date}T00:00:00.000Z`)
+      : new Date();
+    const dayEnd = date
+      ? new Date(`${date}T23:59:59.999Z`)
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     // Requête optimisée — projection minimale + index utilisé
     const slots = await prisma.slot.findMany({
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
     const grouped = groupSlotsByPeriod(slots);
 
     return NextResponse.json(
-      { data: { slots, grouped, date, count: slots.length } },
+      { data: { slots, grouped, date: date ?? null, count: slots.length } },
       {
         status: 200,
         headers: {

@@ -24,7 +24,7 @@ export async function sendOtp(phone: string): Promise<{ sent: boolean }> {
   // Normaliser le numéro
   const normalizedPhone = normalizePhone(phone);
 
-  // Rate limit : 5 OTP max par heure par numéro
+  // Rate limit : 20 OTP max par heure par numéro
   const recentOtps = await prisma.auditLog.count({
     where: {
       action: "otp.sent",
@@ -33,7 +33,7 @@ export async function sendOtp(phone: string): Promise<{ sent: boolean }> {
     },
   });
 
-  if (recentOtps >= 5) {
+  if (recentOtps >= 20) {
     throw new AppError(
       "OTP_RATE_LIMITED",
       "Trop de tentatives. Attendez 1 heure.",

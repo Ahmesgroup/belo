@@ -16,6 +16,26 @@ const PLAN_BADGE: Record<string, { bg: string; color: string; text: string }> = 
   FREE:    { bg:"rgba(34,211,138,.08)", color:"var(--g2)",     text:"● Actif" },
 };
 
+const FILTERS = ["Tous","💇‍♀️ Coiffure","💅 Ongles","💆‍♀️ Massage","✂️ Barbershop","🧖 Spa","💄 Maquillage"];
+
+// Maps filter label → search keyword sent to the API
+const CAT_SEARCH: Record<string, string> = {
+  "💇‍♀️ Coiffure":  "coiffure",
+  "💅 Ongles":      "ongles",
+  "💆‍♀️ Massage":   "massage",
+  "✂️ Barbershop":  "barber",
+  "🧖 Spa":         "spa",
+  "💄 Maquillage":  "maquillage",
+};
+
+// Resolve a raw ?cat= URL param to one of our FILTERS labels
+function resolveInitialCat(raw: string | null): string {
+  if (!raw) return "Tous";
+  if (FILTERS.includes(raw)) return raw;
+  const lower = raw.toLowerCase();
+  return FILTERS.find(f => f.toLowerCase().includes(lower) || lower.includes(f.replace(/[^\w]/g, "").toLowerCase())) ?? "Tous";
+}
+
 function SkeletonGrid() {
   return (
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
@@ -34,12 +54,28 @@ function SkeletonGrid() {
 }
 
 export default function SalonsPage() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [category, setCategory] = useState("Tous");
+  const [tenants,  setTenants]  = useState<Tenant[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState("");
 
+  // Read ?cat= from URL on mount and apply as initial filter
   useEffect(() => {
-    fetch("/api/tenants?page=1&pageSize=20")
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const initial = resolveInitialCat(params.get("cat"));
+      if (initial !== "Tous") setCategory(initial);
+    }
+  }, []);
+
+  // Re-fetch whenever category changes
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    const search = category !== "Tous" && CAT_SEARCH[category]
+      ? `&search=${encodeURIComponent(CAT_SEARCH[category])}`
+      : "";
+    fetch(`/api/tenants?page=1&pageSize=20${search}`)
       .then(r => r.json())
       .then(d => {
         if (d.data?.tenants) setTenants(d.data.tenants);
@@ -47,7 +83,7 @@ export default function SalonsPage() {
       })
       .catch(() => setError("Erreur réseau. Veuillez réessayer."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [category]);
 
   return (
     <>
@@ -58,13 +94,22 @@ export default function SalonsPage() {
             Tous les salons
           </h1>
           <p style={{color:"var(--text2)",marginBottom:28}}>
-            {loading ? "Chargement…" : error ? "" : `${tenants.length} salon${tenants.length !== 1 ? "s" : ""} disponible${tenants.length !== 1 ? "s" : ""} · Réservation en 45 secondes`}
+            {loading
+              ? "Chargement…"
+              : error
+              ? ""
+              : `${tenants.length} salon${tenants.length !== 1 ? "s" : ""} disponible${tenants.length !== 1 ? "s" : ""} · Réservation en 45 secondes`}
           </p>
 
+          {/* Category filters */}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:24}}>
-            {["Tous","💇‍♀️ Coiffure","💅 Ongles","💆‍♀️ Massage","✂️ Barbershop","🧖 Spa","💄 Maquillage"].map(c => (
-              <button key={c} style={{padding:"6px 14px",borderRadius:99,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:12,cursor:"pointer"}}>
-                {c}
+            {FILTERS.map(f => (
+              <button
+                key={f}
+                onClick={() => setCategory(f)}
+                style={{padding:"6px 14px",borderRadius:99,border:`1px solid ${category===f?"var(--g2)":"var(--border2)"}`,background:category===f?"rgba(34,211,138,.1)":"transparent",color:category===f?"var(--g2)":"var(--text3)",fontSize:12,cursor:"pointer",transition:".2s",fontWeight:category===f?600:400}}
+              >
+                {f}
               </button>
             ))}
           </div>
@@ -77,7 +122,7 @@ export default function SalonsPage() {
               <div style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,marginBottom:8}}>Impossible de charger les salons</div>
               <p style={{color:"var(--text3)",fontSize:13,marginBottom:20}}>{error}</p>
               <button
-                onClick={() => { setError(""); setLoading(true); fetch("/api/tenants?page=1&pageSize=20").then(r=>r.json()).then(d=>{if(d.data?.tenants)setTenants(d.data.tenants);else setError("Erreur.");}).catch(()=>setError("Erreur réseau.")).finally(()=>setLoading(false)); }}
+                onClick={() => setCategory(c => c)}
                 style={{padding:"10px 20px",borderRadius:10,background:"var(--g)",color:"#fff",border:"none",fontFamily:"var(--serif)",fontSize:13,fontWeight:700,cursor:"pointer"}}
               >
                 Réessayer
@@ -88,8 +133,17 @@ export default function SalonsPage() {
           {!loading && !error && tenants.length === 0 && (
             <div style={{textAlign:"center",padding:"60px 0"}}>
               <div style={{fontSize:40,marginBottom:12}}>🔍</div>
-              <div style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,marginBottom:8}}>Aucun salon trouvé</div>
-              <p style={{color:"var(--text3)",fontSize:13}}>Revenez bientôt — de nouveaux salons s'inscrivent chaque semaine.</p>
+              <div style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,marginBottom:8}}>
+                {category === "Tous" ? "Aucun salon trouvé" : `Aucun salon "${category.replace(/^\S+\s/,"")}" trouvé`}
+              </div>
+              <p style={{color:"var(--text3)",fontSize:13,marginBottom:16}}>
+                Revenez bientôt — de nouveaux salons s'inscrivent chaque semaine.
+              </p>
+              {category !== "Tous" && (
+                <button onClick={() => setCategory("Tous")} style={{padding:"8px 16px",borderRadius:9,border:"1px solid var(--border2)",background:"transparent",color:"var(--text2)",fontSize:12,cursor:"pointer"}}>
+                  Voir tous les salons
+                </button>
+              )}
             </div>
           )}
 
