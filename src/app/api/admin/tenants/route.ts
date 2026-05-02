@@ -307,7 +307,6 @@ async function handleBulk(req: NextRequest) {
         where: { id: { in: tenantIds } },
         data:  {
           status: newStatus as any,
-          ...(action === "validate" ? { isVerified: true } : {}),
         },
       });
 

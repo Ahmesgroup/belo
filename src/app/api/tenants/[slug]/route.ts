@@ -30,6 +30,7 @@ export async function GET(
         depositEnabled:    true,
         depositPercent:    true,
         bookingsUsedMonth: true,
+        horaires:          true,
         services: {
           where:   { isActive: true },
           select: {
@@ -59,12 +60,15 @@ export async function GET(
   }
 }
 
+const HorairesDay = z.object({ open: z.boolean(), from: z.string(), to: z.string() });
+
 const PatchSchema = z.object({
-  name:    z.string().min(2).max(100).optional(),
-  phone:   z.string().optional(),
-  address: z.string().optional(),
-  city:    z.string().optional(),
-  email:   z.string().email().optional(),
+  name:     z.string().min(2).max(100).optional(),
+  phone:    z.string().optional(),
+  address:  z.string().optional(),
+  city:     z.string().optional(),
+  email:    z.string().email().optional(),
+  horaires: z.array(HorairesDay).length(7).optional(),
 }).partial();
 
 export async function PATCH(

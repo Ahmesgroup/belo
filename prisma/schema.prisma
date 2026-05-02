@@ -127,6 +127,8 @@ model Tenant {
   // Réseaux sociaux (JSON compact — évite colonnes nulles)
   socials     Json?
   // { facebook?, instagram?, tiktok?, website? }
+  horaires    Json?
+  // [{ open, from, to }] × 7 jours — lundi à dimanche
 
   // Config acompte
   depositEnabled    Boolean  @default(false)

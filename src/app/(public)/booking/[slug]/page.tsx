@@ -48,7 +48,6 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
     fetch(`/api/tenants/${params.slug}`, { signal: controller.signal })
       .then(r => r.json())
       .then(d => {
-        console.error("[Booking] API response:", JSON.stringify(d));
         if (d.data) setTenant(d.data);
         else setLoadErr(d.error?.message ?? "Salon introuvable.");
       })
@@ -64,17 +63,22 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
     return () => { controller.abort(); clearTimeout(timer); };
   }, [params.slug]);
 
-  // Load slots when service or date changes
+  // Stable primitive IDs — prevent object reference churn causing 422 loops
+  const tenantId = tenant?.id ?? null;
+  const svcId    = svc?.id    ?? null;
+
   useEffect(() => {
-    if (!tenant || !svc) return;
+    if (!tenantId || !svcId) return;
+    const controller = new AbortController();
     setSlotsLoading(true);
     setSlot(null);
-    fetch(`/api/slots?tenantId=${tenant.id}&serviceId=${svc.id}&date=${dateStr}`)
+    fetch(`/api/slots?tenantId=${tenantId}&serviceId=${svcId}&date=${dateStr}`, { signal: controller.signal })
       .then(r => r.json())
       .then(d => { setSlots(d.data?.slots ?? []); })
-      .catch(() => setSlots([]))
+      .catch(err => { if (err.name !== "AbortError") setSlots([]); })
       .finally(() => setSlotsLoading(false));
-  }, [tenant, svc, dateStr]);
+    return () => controller.abort();
+  }, [tenantId, svcId, dateStr]);
 
   async function confirmBooking() {
     if (!tenant || !svc || !slot) return;

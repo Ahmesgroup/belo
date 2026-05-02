@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "Belo — La beauté réservée en 45 secondes", template: "%s | Belo" },
   description: "Réservez les meilleurs salons de beauté au Sénégal. Wave · Orange Money · WhatsApp.",
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
   keywords: ["salon", "beauté", "coiffure", "Dakar", "Sénégal", "réservation"],
   openGraph: {
     title: "Belo — La beauté réservée en 45 secondes",
