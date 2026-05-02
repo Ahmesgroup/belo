@@ -23,13 +23,13 @@ import { rateLimit } from "@/lib/rate-limit";
 
 const GetSlotsSchema = z.object({
   tenantId:  z.string().cuid("Salon invalide"),
-  serviceId: z.string().cuid("Service invalide").optional(),
+  serviceId: z.string().min(1).optional(),   // min(1) not cuid() — seed IDs may not be CUID format
   date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format date attendu : YYYY-MM-DD").optional(),
 });
 
 // Pour générer des créneaux en masse (gérant)
 const GenerateSlotsSchema = z.object({
-  serviceId:  z.string().cuid().optional(),    // null = tous les services
+  serviceId:  z.string().min(1).optional(),    // null = tous les services
   startDate:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   endDate:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   openTime:   z.string().regex(/^\d{2}:\d{2}$/, "Format HH:MM"),

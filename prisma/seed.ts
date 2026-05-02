@@ -114,14 +114,13 @@ async function main() {
     await prisma.user.update({ where:{ id: owner.id }, data:{ tenantId: tenant.id } });
     tenantMap[s.slug] = tenant.id;
 
-    // Creer services avec index numerique simple (pas entries())
-    for (let i = 0; i < s.services.length; i++) {
-      const svc = s.services[i];
-      const svcId = "seed-" + tenant.id.slice(-8) + "-" + i;
-      await prisma.service.upsert({
-        where:  { id: svcId },
-        update: {},
-        create: { id: svcId, tenantId: tenant.id, ...svc },
+    // Delete old services first so re-seeding always produces proper CUIDs
+    await prisma.service.deleteMany({ where: { tenantId: tenant.id } });
+
+    // Create services — let Prisma auto-generate CUIDs
+    for (const svc of s.services) {
+      await prisma.service.create({
+        data: { tenantId: tenant.id, ...svc },
       });
     }
 
