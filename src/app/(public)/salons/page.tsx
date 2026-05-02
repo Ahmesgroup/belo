@@ -18,14 +18,14 @@ const PLAN_BADGE: Record<string, { bg: string; color: string; text: string }> = 
 
 const FILTERS = ["Tous","💇‍♀️ Coiffure","💅 Ongles","💆‍♀️ Massage","✂️ Barbershop","🧖 Spa","💄 Maquillage"];
 
-// Maps filter label → search keyword sent to the API
-const CAT_SEARCH: Record<string, string> = {
-  "💇‍♀️ Coiffure":  "coiffure",
-  "💅 Ongles":      "ongles",
+// Maps filter label → DB category value
+const CAT_MAP: Record<string, string> = {
+  "💇‍♀️ Coiffure":  "hair",
+  "💅 Ongles":      "nails",
   "💆‍♀️ Massage":   "massage",
   "✂️ Barbershop":  "barber",
   "🧖 Spa":         "spa",
-  "💄 Maquillage":  "maquillage",
+  "💄 Maquillage":  "beauty",
 };
 
 // Resolve a raw ?cat= URL param to one of our FILTERS labels
@@ -56,6 +56,7 @@ function SkeletonGrid() {
 export default function SalonsPage() {
   const [category, setCategory] = useState("Tous");
   const [tenants,  setTenants]  = useState<Tenant[]>([]);
+  const [total,    setTotal]    = useState(0);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState("");
 
@@ -72,14 +73,16 @@ export default function SalonsPage() {
   useEffect(() => {
     setLoading(true);
     setError("");
-    const search = category !== "Tous" && CAT_SEARCH[category]
-      ? `&search=${encodeURIComponent(CAT_SEARCH[category])}`
+    const catParam = category !== "Tous" && CAT_MAP[category]
+      ? `&category=${encodeURIComponent(CAT_MAP[category])}`
       : "";
-    fetch(`/api/tenants?page=1&pageSize=20${search}`)
+    fetch(`/api/tenants?page=1&pageSize=20${catParam}`)
       .then(r => r.json())
       .then(d => {
-        if (d.data?.tenants) setTenants(d.data.tenants);
-        else setError("Impossible de charger les salons.");
+        if (d.data?.tenants) {
+          setTenants(d.data.tenants);
+          if (d.data.pagination?.total) setTotal(d.data.pagination.total);
+        } else setError("Impossible de charger les salons.");
       })
       .catch(() => setError("Erreur réseau. Veuillez réessayer."))
       .finally(() => setLoading(false));
@@ -98,7 +101,7 @@ export default function SalonsPage() {
               ? "Chargement…"
               : error
               ? ""
-              : `${tenants.length} salon${tenants.length !== 1 ? "s" : ""} disponible${tenants.length !== 1 ? "s" : ""} · Réservation en 45 secondes`}
+              : `${total > 0 ? total : tenants.length} salon${(total || tenants.length) !== 1 ? "s" : ""} disponible${(total || tenants.length) !== 1 ? "s" : ""} · Réservation en 45 secondes`}
           </p>
 
           {/* Category filters */}

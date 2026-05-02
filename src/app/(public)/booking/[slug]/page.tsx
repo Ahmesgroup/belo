@@ -40,12 +40,28 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
   const [done,       setDone]       = useState(false);
   const [bookingRef, setBookingRef] = useState("");
 
-  // Load tenant + services
+  // Load tenant + services (with 5s timeout)
   useEffect(() => {
-    fetch(`/api/tenants/${params.slug}`)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+
+    fetch(`/api/tenants/${params.slug}`, { signal: controller.signal })
       .then(r => r.json())
-      .then(d => { if (d.data) setTenant(d.data); else setLoadErr("Salon introuvable."); })
-      .catch(() => setLoadErr("Erreur de connexion."));
+      .then(d => {
+        console.error("[Booking] API response:", JSON.stringify(d));
+        if (d.data) setTenant(d.data);
+        else setLoadErr(d.error?.message ?? "Salon introuvable.");
+      })
+      .catch(err => {
+        const msg = err.name === "AbortError"
+          ? "Délai dépassé — salon introuvable."
+          : "Erreur de connexion.";
+        console.error("[Booking] fetch error:", err);
+        setLoadErr(msg);
+      })
+      .finally(() => clearTimeout(timer));
+
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [params.slug]);
 
   // Load slots when service or date changes

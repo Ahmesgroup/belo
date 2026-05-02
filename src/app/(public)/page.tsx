@@ -11,12 +11,16 @@ const planBadge = (p: string) =>
                     { bg:"rgba(34,211,138,.12)",   color:"var(--g2)",    text:"● Disponible" };
 
 export default function LandingPage() {
-  const [salons, setSalons] = useState<Tenant[]>([]);
+  const [salons,      setSalons]      = useState<Tenant[]>([]);
+  const [salonTotal,  setSalonTotal]  = useState(0);
 
   useEffect(() => {
     fetch("/api/tenants?pageSize=4")
       .then(r => r.json())
-      .then(d => { if (d.data?.tenants) setSalons(d.data.tenants); })
+      .then(d => {
+        if (d.data?.tenants) setSalons(d.data.tenants);
+        if (d.data?.pagination?.total) setSalonTotal(d.data.pagination.total);
+      })
       .catch(() => {});
   }, []);
 
@@ -66,7 +70,7 @@ export default function LandingPage() {
             </div>
 
             <div style={{display:"flex",border:"1px solid var(--border)",borderRadius:14,overflow:"hidden",maxWidth:600,width:"100%",margin:"0 auto",background:"rgba(11,15,22,.8)",backdropFilter:"blur(8px)"}}>
-              {[["14k+","Réservations/mois"],["340+","Salons partenaires"],["4.9★","Note moyenne"],["Wave ✓","+ Orange Money"]].map(([n,l]) => (
+              {[["14k+","Réservations/mois"],[salonTotal > 0 ? `${salonTotal}+` : "…+","Salons partenaires"],["4.9★","Note moyenne"],["Wave ✓","+ Orange Money"]].map(([n,l]) => (
                 <div key={l} style={{flex:1,padding:"16px 18px",textAlign:"center",borderRight:"1px solid var(--border)"}}>
                   <div style={{fontFamily:"var(--serif)",fontSize:22,fontWeight:700,color:"var(--g2)",lineHeight:1,marginBottom:3}}>{n}</div>
                   <div style={{fontSize:10,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".05em"}}>{l}</div>
@@ -146,7 +150,7 @@ export default function LandingPage() {
         <section style={{padding:"60px 5vw",textAlign:"center"}}>
           <div style={{maxWidth:600,margin:"0 auto",background:"var(--card)",border:"1px solid var(--border2)",borderRadius:24,padding:"48px 32px"}}>
             <h2 style={{fontFamily:"var(--serif)",fontSize:"clamp(24px,4vw,40px)",fontWeight:800,marginBottom:12,letterSpacing:"-.02em"}}>Votre prochain rendez-vous <span style={{color:"var(--g2)",fontStyle:"italic"}}>vous attend là</span></h2>
-            <p style={{color:"var(--text2)",marginBottom:28}}>340 salons disponibles. Réservation en 45 secondes. Confirmation immédiate.</p>
+            <p style={{color:"var(--text2)",marginBottom:28}}>{salonTotal > 0 ? salonTotal : "…"} salons disponibles. Réservation en 45 secondes. Confirmation immédiate.</p>
             <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
               <Link href="/salons" style={{padding:"13px 26px",borderRadius:12,background:"var(--g)",color:"#fff",fontFamily:"var(--serif)",fontSize:14,fontWeight:700,textDecoration:"none"}}>✦ Trouver un salon</Link>
               <Link href="/plans" style={{padding:"13px 26px",borderRadius:12,background:"rgba(255,255,255,.06)",color:"var(--text)",border:"1px solid var(--border2)",fontFamily:"var(--sans)",fontSize:14,textDecoration:"none"}}>📲 Pour les salons</Link>
