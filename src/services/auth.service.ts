@@ -240,3 +240,4 @@ async function sendOtpDirect(phone: string, message: string): Promise<void> {
     throw new AppError("WHATSAPP_ERROR", `Envoi OTP échoué: ${JSON.stringify(err)}`, 500);
   }
 }
+

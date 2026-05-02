@@ -1,0 +1,11 @@
+const fs=require('fs'); 
+const rl=fs.readFileSync('src/lib/rate-limit.ts','utf8'); 
+const fixed=rl.replace('windowMs: 2 * 60 * 1000number','windowMs: number'); 
+fs.writeFileSync('src/lib/rate-limit.ts',fixed); 
+const as=fs.readFileSync('src/services/auth.service.ts','utf8'); 
+const as2=as.replace('60 * 60 * 1000','2 * 60 * 1000').replace('recentOtps ,'recentOtps  1 heure.','Attendez 2 minutes.'); 
+fs.writeFileSync('src/services/auth.service.ts',as2); 
+const ar=fs.readFileSync('src/app/api/auth/route.ts','utf8'); 
+const ar2=ar.replace('max: 5, windowMs: 60 * 60 * 1000','max: 3, windowMs: 2 * 60 * 1000'); 
+fs.writeFileSync('src/app/api/auth/route.ts',ar2); 
+console.log('All fixed!'); 

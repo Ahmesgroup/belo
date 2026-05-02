@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
 async function handleSendOtp(req: NextRequest): Promise<NextResponse> {
   // Rate limit strict — éviter le spam WhatsApp
   // 5 tentatives max par IP par heure (en plus du rate limit par numéro dans auth.service)
-  const limited = await rateLimit(req, { max: 5, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit(req, { max: 3, windowMs: 2 * 60 * 1000 });
   if (limited) {
     return NextResponse.json(
       {
@@ -248,3 +248,4 @@ function handleAuthError(err: unknown): NextResponse {
     { status: 500 }
   );
 }
+

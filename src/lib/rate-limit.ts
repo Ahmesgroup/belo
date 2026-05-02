@@ -3,7 +3,7 @@ import { prisma } from "@/infrastructure/db/prisma";
 
 export async function rateLimit(
   req: NextRequest,
-  opts: { max: number; windowMs: 2 * 60 * 1000number }
+  opts: { max: number; windowMs: number }
 ): Promise<boolean> {
   const ip  = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   const key = `${ip}:${req.nextUrl.pathname}`;
@@ -24,3 +24,4 @@ export async function rateLimit(
 
   return count >= opts.max;
 }
+
