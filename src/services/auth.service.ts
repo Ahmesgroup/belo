@@ -210,12 +210,8 @@ async function verifyOtpHash(otp: string, hash: string): Promise<boolean> {
 
 async function sendOtpDirect(phone: string, message: string): Promise<void> {
   if (!env.WHATSAPP_PHONE_ID || !env.WHATSAPP_TOKEN) {
-    // Dev mode — afficher dans les logs
-    if (env.NODE_ENV === "development") {
-      console.log(`\n🔐 OTP pour ${phone}:\n${message}\n`);
-      return;
-    }
-    throw new AppError("WHATSAPP_NOT_CONFIGURED", "WhatsApp non configuré.", 500);
+    console.log(`\n🔐 OTP pour ${phone}: ${message}\n`);
+    return;
   }
 
   const to = phone.replace(/^\+/, "");
