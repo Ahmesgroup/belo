@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PublicNav } from "@/components/ui/Nav";
 import Link from "next/link";
 
-type Tenant = { id: string; name: string; slug: string; city: string | null; plan: string; _count: { bookings: number } };
+type Tenant = { id: string; name: string; slug: string; city: string | null; plan: string; coverUrl?: string | null; _count: { bookings: number } };
 
 const planBadge = (p: string) =>
   p === "PREMIUM" ? { bg:"rgba(144,96,232,.12)", color:"var(--purple)", text:"★ Premium" } :
@@ -129,9 +129,13 @@ export default function LandingPage() {
                 const b = planBadge(s.plan);
                 return (
                   <div key={s.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",cursor:"pointer",transition:".25s"}} className="salon-hover">
-                    <div style={{height:140,background:"linear-gradient(135deg,#1a2a1a,#0d2d1a)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40}}>
-                      💇‍♀️
-                      <div style={{position:"absolute",top:10,right:10,background:b.bg,color:b.color,fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,border:`1px solid ${b.color}33`}}>{b.text}</div>
+                    <div style={{height:140,background:"linear-gradient(135deg,#1a2a1a,#0d2d1a)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,overflow:"hidden"}}>
+                      {s.coverUrl ? (
+                        <img src={s.coverUrl} alt={s.name} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} />
+                      ) : (
+                        <span style={{position:"relative",zIndex:1}}>💇‍♀️</span>
+                      )}
+                      <div style={{position:"absolute",top:10,right:10,background:b.bg,color:b.color,fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:99,border:`1px solid ${b.color}33`,zIndex:2}}>{b.text}</div>
                     </div>
                     <div style={{padding:14}}>
                       <div style={{fontFamily:"var(--serif)",fontSize:14,fontWeight:600,marginBottom:4}}>{s.name}</div>

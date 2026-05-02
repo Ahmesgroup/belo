@@ -105,7 +105,15 @@ export function PublicNav() {
   );
 }
 
-export function DashboardNav({ plan = "FREE" }: { plan?: "FREE" | "PRO" | "PREMIUM" }) {
+export function DashboardNav({
+  plan = "FREE",
+  mobile = false,
+  onClose,
+}: {
+  plan?: "FREE" | "PRO" | "PREMIUM";
+  mobile?: boolean;
+  onClose?: () => void;
+}) {
   const pathname = usePathname();
 
   const links = [
@@ -125,10 +133,13 @@ export function DashboardNav({ plan = "FREE" }: { plan?: "FREE" | "PRO" | "PREMI
 
   return (
     <aside style={{
-      width: 220, background: "var(--card2)",
-      borderRight: `1px solid ${plan === "PREMIUM" ? "rgba(144,96,232,.2)" : "var(--border)"}`,
+      width: mobile ? "100%" : 220,
+      background: "var(--card2)",
+      borderRight: mobile ? "none" : `1px solid ${plan === "PREMIUM" ? "rgba(144,96,232,.2)" : "var(--border)"}`,
       display: "flex", flexDirection: "column", flexShrink: 0,
-      height: "100vh", position: "sticky", top: 0, overflowY: "auto",
+      height: mobile ? "auto" : "100vh",
+      position: mobile ? "relative" : "sticky",
+      top: 0, overflowY: "auto",
     }}>
       <div style={{padding:"16px",display:"flex",alignItems:"center",gap:9,borderBottom:"1px solid var(--border)"}}>
         <div style={{width:30,height:30,background:"linear-gradient(135deg,var(--g),#074030)",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>✦</div>
@@ -155,15 +166,17 @@ export function DashboardNav({ plan = "FREE" }: { plan?: "FREE" | "PRO" | "PREMI
         {links.map(({ href, icon, label }) => {
           const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           return (
-            <Link key={href} href={href} style={{
-              display:"flex",alignItems:"center",gap:9,padding:"8px 10px",
-              borderRadius:8,fontSize:12,
+            <Link key={href} href={href} onClick={onClose} style={{
+              display:"flex",alignItems:"center",gap:9,
+              padding: mobile ? "16px 12px" : "8px 10px",
+              borderRadius:8,
+              fontSize: mobile ? 15 : 12,
               color: active ? "var(--g2)" : "var(--text3)",
               background: active ? "rgba(34,211,138,.1)" : "transparent",
               textDecoration:"none",marginBottom:2,transition:".15s",
               borderLeft: active ? "3px solid var(--g2)" : "3px solid transparent",
             }}>
-              <span style={{fontSize:13,width:17,textAlign:"center"}}>{icon}</span>
+              <span style={{fontSize:mobile?18:13,width:17,textAlign:"center"}}>{icon}</span>
               {label}
             </Link>
           );

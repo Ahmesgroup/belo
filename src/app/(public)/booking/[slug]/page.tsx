@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type Service = { id: string; name: string; category: string; priceCents: number; durationMin: number; photos: string[] };
 type Slot    = { id: string; startsAt: string; endsAt: string; isAvailable: boolean };
-type Tenant  = { id: string; name: string; slug: string; city: string | null; plan: string; depositEnabled: boolean; depositPercent: number; services: Service[]; _count?: { bookings: number } };
+type Tenant  = { id: string; name: string; slug: string; city: string | null; plan: string; coverUrl?: string | null; depositEnabled: boolean; depositPercent: number; services: Service[]; _count?: { bookings: number } };
 
 const ICONS: Record<string, string> = { hair:"💇‍♀️", HAIR:"💇‍♀️", nails:"💅", NAILS:"💅", massage:"💆‍♀️", MASSAGE:"💆‍♀️", barber:"✂️", BARBER:"✂️", spa:"🧖‍♀️", SPA:"🧖‍♀️", other:"✦", OTHER:"✦", beauty:"🧴", BEAUTY:"🧴", makeup:"💄", MAKEUP:"💄" };
 const icon = (cat: string) => ICONS[cat] ?? "✦";
@@ -49,20 +49,18 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
   // Load tenant + services (with 5s timeout)
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = setTimeout(() => controller.abort(), 10000);
 
     fetch(`/api/tenants/${params.slug}`, { signal: controller.signal })
       .then(r => r.json())
       .then(d => {
         if (d.data) setTenant(d.data);
-        else setLoadErr(d.error?.message ?? "Salon introuvable.");
+        else if (d.error?.code === "NOT_FOUND") setLoadErr("Ce salon n'existe pas ou n'est plus disponible.");
+        else setLoadErr("Impossible de charger ce salon. Réessayez.");
       })
       .catch(err => {
-        const msg = err.name === "AbortError"
-          ? "Délai dépassé — salon introuvable."
-          : "Erreur de connexion.";
-        console.error("[Booking] fetch error:", err);
-        setLoadErr(msg);
+        if (err.name === "AbortError") setLoadErr("Chargement trop long. Vérifiez votre connexion.");
+        else setLoadErr("Erreur de connexion. Réessayez.");
       })
       .finally(() => clearTimeout(timer));
 
@@ -156,8 +154,8 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
           {/* Salon header card */}
           <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",marginBottom:24}}>
             <div style={{height:160,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#0d2d1a,#1a3a2a)"}}>
-              {(tenant as any).coverUrl ? (
-                <img src={(tenant as any).coverUrl} alt={tenant.name}
+              {tenant.coverUrl ? (
+                <img src={tenant.coverUrl} alt={tenant.name}
                   style={{width:"100%",height:"100%",objectFit:"cover",opacity:.85}} />
               ) : (
                 <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48}}>

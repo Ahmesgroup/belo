@@ -12,8 +12,10 @@ export default function AdminPage() {
   const [toasts,   setToasts]   = useState<{id:number;msg:string}[]>([]);
   const [tenants,  setTenants]  = useState<any[]>([]);
   const [stats,    setStats]    = useState<Record<string,number>>({});
-  const [loading,  setLoading]  = useState(true);
-  const [isMobile,     setIsMobile]     = useState(false);
+  const [loading,     setLoading]     = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAdmin,     setIsAdmin]     = useState(false);
+  const [isMobile,    setIsMobile]    = useState(false);
   const [menuOpen,     setMenuOpen]     = useState(false);
   const [planConfigs,  setPlanConfigs]  = useState<any[]>([]);
   const [editingPlan,  setEditingPlan]  = useState<string|null>(null);
@@ -31,14 +33,25 @@ export default function AdminPage() {
 
   useEffect(() => {
     const token = localStorage.getItem("belo_token");
+    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? "{}"); } catch { return {}; } })();
+
     if (!token) { router.replace("/login"); return; }
-    const user = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? "{}"); } catch { return {}; } })();
-    // If localStorage role is already admin — proceed
-    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return;
-    // Otherwise verify via API (localStorage might be stale)
+
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") {
+      setIsAdmin(true); setAuthChecked(true); return;
+    }
+
     fetch("/api/admin/tenants?pageSize=1", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => { if (r.status === 401 || r.status === 403) router.replace("/"); })
-      .catch(() => router.replace("/"));
+      .then(r => {
+        if (r.ok) {
+          setIsAdmin(true);
+          localStorage.setItem("belo_user", JSON.stringify({ ...user, role: "SUPER_ADMIN" }));
+        } else {
+          router.replace("/");
+        }
+        setAuthChecked(true);
+      })
+      .catch(() => { router.replace("/"); });
   }, [router]);
 
   useEffect(() => {
@@ -55,9 +68,11 @@ export default function AdminPage() {
   }, [view]);
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("belo_token") : null;
-    fetch("/api/admin/tenants", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    if (!isAdmin) return;
+    const token = localStorage.getItem("belo_token");
+    setLoading(true);
+    fetch("/api/admin/tenants?pageSize=25", {
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
       .then(d => {
@@ -66,7 +81,7 @@ export default function AdminPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [isAdmin]);
 
   function toast(msg: string) {
     const id = Date.now();
@@ -80,35 +95,69 @@ export default function AdminPage() {
     return <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:99,background:bg,color}}>{s.toUpperCase()}</span>;
   };
 
+  if (!authChecked) return (
+    <div style={{display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",background:"var(--bg)"}}>
+      <div style={{color:"var(--text3)",fontSize:13}}>Vérification…</div>
+    </div>
+  );
+  if (!isAdmin) return null;
+
   return (
-    <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-      {/* Sidebar */}
-      <aside style={{width:240,background:"#070b10",borderRight:"1px solid rgba(30,40,55,.8)",display:"flex",flexDirection:"column",flexShrink:0}}>
-        <div style={{padding:"16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid var(--border)"}}>
-          <div style={{width:30,height:30,background:"linear-gradient(135deg,var(--red),#800)",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>⚡</div>
-          <div>
-            <div style={{fontFamily:"var(--serif)",fontWeight:800,fontSize:15}}>belo<span style={{color:"var(--red)"}}>.</span></div>
-            <div style={{fontSize:9,color:"var(--red)",letterSpacing:".06em"}}>Super Admin</div>
-          </div>
-        </div>
-        <div style={{margin:"10px 12px 0",padding:"4px 10px",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8,fontSize:9,fontWeight:700,color:"var(--red)",letterSpacing:".08em",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-          <span style={{width:5,height:5,borderRadius:"50%",background:"var(--g2)",animation:"pulse 2s infinite"}} />
-          Système opérationnel · Live
-        </div>
-        <nav style={{padding:"8px 0",flex:1}}>
-          {[["▦","Mission Control",0],["🏢","Tenants",1],["💳","Plans",2],["🛡️","Fraude",3],["👥","Équipe",4],["📋","Logs",5],["⚙️","Réglages",6]].map(([icon,label,idx]) => (
-            <div key={label as string} onClick={() => setView(idx as number)} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 16px",fontSize:12,color:view===idx?"var(--g2)":"var(--text3)",background:view===idx?"rgba(34,211,138,.1)":"transparent",cursor:"pointer",transition:".15s",borderLeft:view===idx?"3px solid var(--g2)":"3px solid transparent",marginBottom:1}}>
-              <span style={{fontSize:13,width:17,textAlign:"center"}}>{icon}</span>{label}
+    <div style={{display:"flex",flexDirection:isMobile?"column":"row",minHeight:"100vh",height:isMobile?"auto":"100vh",overflow:isMobile?"visible":"hidden"}}>
+      {/* Sidebar — desktop */}
+      {!isMobile && (
+        <aside style={{width:240,background:"#070b10",borderRight:"1px solid rgba(30,40,55,.8)",display:"flex",flexDirection:"column",flexShrink:0}}>
+          <div style={{padding:"16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid var(--border)"}}>
+            <div style={{width:30,height:30,background:"linear-gradient(135deg,var(--red),#800)",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>⚡</div>
+            <div>
+              <div style={{fontFamily:"var(--serif)",fontWeight:800,fontSize:15}}>belo<span style={{color:"var(--red)"}}>.</span></div>
+              <div style={{fontSize:9,color:"var(--red)",letterSpacing:".06em"}}>Super Admin</div>
             </div>
-          ))}
-        </nav>
-        <div style={{padding:"10px 8px",borderTop:"1px solid var(--border)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8}}>
-            <div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,var(--red),#800)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>P</div>
-            <div><div style={{fontSize:11,fontWeight:600}}>Pape Diouf</div><div style={{fontSize:9,color:"var(--red)"}}>SUPER ADMIN</div></div>
           </div>
+          <div style={{margin:"10px 12px 0",padding:"4px 10px",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8,fontSize:9,fontWeight:700,color:"var(--red)",letterSpacing:".08em",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+            <span style={{width:5,height:5,borderRadius:"50%",background:"var(--g2)",animation:"pulse 2s infinite"}} />
+            Système opérationnel · Live
+          </div>
+          <nav style={{padding:"8px 0",flex:1}}>
+            {[["▦","Mission Control",0],["🏢","Tenants",1],["💳","Plans",2],["🛡️","Fraude",3],["👥","Équipe",4],["📋","Logs",5],["⚙️","Réglages",6]].map(([icon,label,idx]) => (
+              <div key={label as string} onClick={() => setView(idx as number)} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 16px",fontSize:12,color:view===idx?"var(--g2)":"var(--text3)",background:view===idx?"rgba(34,211,138,.1)":"transparent",cursor:"pointer",transition:".15s",borderLeft:view===idx?"3px solid var(--g2)":"3px solid transparent",marginBottom:1}}>
+                <span style={{fontSize:13,width:17,textAlign:"center"}}>{icon}</span>{label}
+              </div>
+            ))}
+          </nav>
+          <div style={{padding:"10px 8px",borderTop:"1px solid var(--border)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8}}>
+              <div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,var(--red),#800)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>P</div>
+              <div><div style={{fontSize:11,fontWeight:600}}>Pape Diouf</div><div style={{fontSize:9,color:"var(--red)"}}>SUPER ADMIN</div></div>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* Top bar — mobile */}
+      {isMobile && (
+        <div style={{position:"sticky",top:0,zIndex:100,background:"#070b10",borderBottom:"1px solid rgba(255,255,255,.08)",padding:"0 16px",height:52,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontFamily:"var(--serif)",fontWeight:800,fontSize:15}}>
+            belo<span style={{color:"var(--red)"}}>.</span>
+            <span style={{fontSize:9,color:"var(--red)",marginLeft:8,fontWeight:600}}>ADMIN</span>
+          </div>
+          <button type="button" onClick={() => setMenuOpen(!menuOpen)}
+            style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:8,padding:"6px 12px",color:"rgba(255,255,255,.7)",fontSize:11,cursor:"pointer"}}>
+            {VIEWS[view]} ▾
+          </button>
+          {menuOpen && (
+            <div style={{position:"fixed",top:52,left:0,right:0,bottom:0,background:"#070b10",zIndex:200,padding:16,overflowY:"auto"}}>
+              {VIEWS.map((label, idx) => (
+                <div key={label}
+                  onClick={() => { setView(idx); setMenuOpen(false); }}
+                  style={{padding:"16px 12px",fontSize:14,cursor:"pointer",borderBottom:"1px solid rgba(255,255,255,.06)",color:view===idx?"var(--g2)":"rgba(255,255,255,.6)",fontWeight:view===idx?600:400}}>
+                  {["▦","🏢","💳","🛡️","👥","📋","⚙️"][idx]} {label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </aside>
+      )}
 
       {/* Main */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -137,7 +186,7 @@ export default function AdminPage() {
             <>
               <div style={{background:"rgba(239,68,68,.05)",border:"1px solid rgba(239,68,68,.18)",borderRadius:12,padding:"12px 14px"}}>
                 <div style={{fontFamily:"var(--serif)",fontWeight:700,fontSize:11,color:"var(--red)",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>⚡ Actions critiques requises</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9}}>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:9}}>
                   {[
                     { icon:"🚨", title:"Suspendre Golden Touch Nails", sub:"Score fraude 87% · 48 annulations/24h · 17 IPs suspectes", impact:"Impact : -2.1% fraude plateforme", impactColor:"var(--red)", btn1:"🚫 Suspendre", btn2:"Enquêter" },
                     { icon:"⬆️", title:"8 salons FREE à 90%+ quota", sub:"Opportunité conversion Pro → +200k F MRR potentiel", impact:"Impact : +200 000 F MRR estimé", impactColor:"var(--g2)", btn1:"Envoyer offre", btn2:"Voir liste" },
@@ -157,7 +206,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(5,1fr)",gap:10}}>
                 {[
                   { lbl:"MRR Plateforme", val:"—", delta:"À venir", color:"var(--g2)" },
                   { lbl:"Bookings (30j)",  val:"—", delta:"À venir", color:"var(--amber)" },
@@ -207,7 +256,7 @@ export default function AdminPage() {
               <div style={{padding:"11px 14px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                 <span style={{fontFamily:"var(--serif)",fontWeight:700,fontSize:12}}>Tous les salons</span>
                 <input placeholder="Nom, ville, email…" style={{width:170,fontSize:11,padding:"6px 10px"}} />
-                {["Tous (340)","✅ Actifs","⏳ Attente","🚫 Bloqués","⚠️ Fraude"].map(f => (
+                {[`Tous (${Object.values(stats).reduce((a:number,b)=>a+(Number(b)||0),0)||tenants.length})`, "✅ Actifs", "⏳ Attente", "🚫 Bloqués", "⚠️ Fraude"].map(f => (
                   <button key={f} style={{padding:"4px 10px",borderRadius:6,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:10,cursor:"pointer"}}>{f}</button>
                 ))}
                 <div style={{marginLeft:"auto",display:"flex",gap:5}}>
@@ -223,7 +272,7 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
-              <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
                 <thead style={{background:"rgba(255,255,255,.02)"}}>
                   <tr>
                     {["","Salon","Plan","Statut","Revenue/mois","Bookings","Health","Changer plan","Actions"].map(h => (
@@ -266,7 +315,7 @@ export default function AdminPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
               <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:10,color:"var(--text3)"}}>
                 <span>1–6 sur <strong>340</strong> · <span style={{color:"var(--amber)"}}>48 en attente</span> · <span style={{color:"var(--red)"}}>2 fraudes</span></span>
                 <div style={{display:"flex",gap:3}}>

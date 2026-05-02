@@ -25,6 +25,7 @@ export async function GET(
         city:              true,
         country:           true,
         photos:            true,
+        coverUrl:          true,
         plan:              true,
         socials:           true,
         depositEnabled:    true,
