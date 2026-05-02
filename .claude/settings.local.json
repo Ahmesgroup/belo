@@ -7,7 +7,8 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(npx vercel *)",
-      "Bash(curl -s \"https://belo-khaki.vercel.app/api/cron/generate-slots\" -H \"Authorization: Bearer dev-secret-123\")"
+      "Bash(curl -s \"https://belo-khaki.vercel.app/api/cron/generate-slots\" -H \"Authorization: Bearer dev-secret-123\")",
+      "Bash(curl -s -H \"Authorization: Bearer dev-secret-123\" \"https://belo-khaki.vercel.app/api/cron/seed-photos\")"
     ]
   }
 }
