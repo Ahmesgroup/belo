@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useLang } from "@/hooks/useLang";
 import { PublicNav } from "@/components/ui/Nav";
 import Link from "next/link";
 
@@ -61,6 +62,7 @@ const DEFAULT_PRICES: Record<string, {monthly:{fcfa:number,eur:number,usd:number
 };
 
 export default function PlansPage() {
+  const { t } = useLang();
   const [period,     setPeriod]     = useState<"monthly"|"annual">("monthly");
   const [currency,   setCurrency]   = useState<"fcfa"|"eur"|"usd">("fcfa");
   const [planPrices, setPlanPrices] = useState(DEFAULT_PRICES);
@@ -100,15 +102,15 @@ export default function PlansPage() {
         <div style={{maxWidth:1100,margin:"0 auto",padding:"40px 5vw 80px",textAlign:"center"}}>
           <div style={{marginBottom:36}}>
             <h1 style={{fontFamily:"var(--serif)",fontSize:"clamp(28px,5vw,48px)",fontWeight:800,marginBottom:10,letterSpacing:"-.02em"}}>
-              Plans & <span style={{color:"var(--g2)"}}>Tarifs</span>
+              {t("plans_title")}
             </h1>
-            <p style={{color:"var(--text2)",fontSize:15,maxWidth:480,margin:"0 auto 20px"}}>Commencez gratuitement. Passez au plan supérieur quand votre business est prêt.</p>
+            <p style={{color:"var(--text2)",fontSize:15,maxWidth:480,margin:"0 auto 20px"}}>{t("plans_sub")}</p>
             
             {/* Period toggle */}
             <div style={{display:"inline-flex",background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:4,gap:2,marginBottom:12}}>
               {(["monthly","annual"] as const).map(p => (
                 <button key={p} onClick={() => setPeriod(p)} style={{padding:"7px 18px",borderRadius:7,fontSize:12,fontFamily:"var(--sans)",fontWeight:600,cursor:"pointer",border:"none",background:period===p?"var(--g)":"transparent",color:period===p?"#fff":"var(--text3)",transition:".2s"}}>
-                  {p === "monthly" ? "Mensuel" : "Annuel — 2 mois offerts"}
+                  {p === "monthly" ? t("monthly") : t("annual")}
                 </button>
               ))}
             </div>

@@ -24,19 +24,21 @@ export async function sendOtp(phone: string): Promise<{ sent: boolean }> {
   // Normaliser le numéro
   const normalizedPhone = normalizePhone(phone);
 
-  // Rate limit : 20 OTP max par heure par numéro
+  // Rate limit : 3 OTP par 2 minutes par numéro
+  const WINDOW_MS    = 2 * 60 * 1000;
+  const MAX_ATTEMPTS = 3;
   const recentOtps = await prisma.auditLog.count({
     where: {
       action: "otp.sent",
       entityId: normalizedPhone,
-      createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
+      createdAt: { gt: new Date(Date.now() - WINDOW_MS) },
     },
   });
 
-  if (recentOtps >= 20) {
+  if (recentOtps >= MAX_ATTEMPTS) {
     throw new AppError(
       "OTP_RATE_LIMITED",
-      "Trop de tentatives. Attendez 1 heure.",
+      "Trop de tentatives. Attendez 2 minutes avant de réessayer.",
       429
     );
   }

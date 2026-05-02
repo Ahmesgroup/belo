@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useLang } from "@/hooks/useLang";
 import { useRouter } from "next/navigation";
 import { PublicNav } from "@/components/ui/Nav";
 import Link from "next/link";
@@ -12,6 +13,7 @@ const planBadge = (p: string) =>
                     { bg:"rgba(34,211,138,.12)",   color:"var(--g2)",    text:"● Disponible" };
 
 export default function LandingPage() {
+  const { t } = useLang();
   const router = useRouter();
   const [salons,      setSalons]      = useState<Tenant[]>([]);
   const [salonTotal,  setSalonTotal]  = useState(0);
@@ -52,7 +54,7 @@ export default function LandingPage() {
             </div>
 
             <h1 style={{fontFamily:"var(--serif)",fontSize:"clamp(36px,5.5vw,68px)",fontWeight:800,lineHeight:1.08,letterSpacing:"-.03em",marginBottom:20}}>
-              La beauté réservée<br />en <span style={{color:"var(--g2)",fontStyle:"italic"}}>45 secondes</span>.<br /><span style={{color:"var(--text2)"}}>Confirmée sur WhatsApp.</span>
+              {t("hero_title")}<br />en <span style={{color:"var(--g2)",fontStyle:"italic"}}>45 secondes</span>.<br /><span style={{color:"var(--text2)"}}>{t("hero_sub")}</span>
             </h1>
 
             <p style={{fontSize:16,color:"var(--text2)",lineHeight:1.7,maxWidth:520,margin:"0 auto 32px"}}>
@@ -62,15 +64,15 @@ export default function LandingPage() {
             <div style={{background:"var(--card)",border:"1px solid var(--border2)",borderRadius:14,padding:5,display:"flex",flexWrap:"wrap",gap:0,maxWidth:600,width:"100%",margin:"0 auto 16px"}}>
               <div style={{flex:1,minWidth:130,display:"flex",alignItems:"center",gap:8,padding:"9px 13px"}}>
                 <span style={{fontSize:13,color:"var(--text3)"}}>🔍</span>
-                <input placeholder="Coiffure, manucure, massage…" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"var(--sans)",fontSize:13,color:"var(--text)"}} />
+                <input placeholder={t("search_service")} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"var(--sans)",fontSize:13,color:"var(--text)"}} />
               </div>
               <div style={{width:1,background:"var(--border)",margin:"5px 0"}} />
               <div style={{flex:1,minWidth:130,display:"flex",alignItems:"center",gap:8,padding:"9px 13px"}}>
                 <span style={{fontSize:13,color:"var(--text3)"}}>📍</span>
-                <input placeholder="Dakar, Thiès…" value={searchCity} onChange={e=>setSearchCity(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"var(--sans)",fontSize:13,color:"var(--text)"}} />
+                <input placeholder={t("search_city")} value={searchCity} onChange={e=>setSearchCity(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"var(--sans)",fontSize:13,color:"var(--text)"}} />
               </div>
               <button onClick={handleSearch} style={{background:"var(--g)",color:"#fff",border:"none",padding:"10px 20px",borderRadius:10,fontFamily:"var(--sans)",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-                Chercher →
+                {t("search_btn")}
               </button>
             </div>
 

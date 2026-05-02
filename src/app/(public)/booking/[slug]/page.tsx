@@ -155,9 +155,16 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
 
           {/* Salon header card */}
           <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",marginBottom:24}}>
-            <div style={{height:120,background:"linear-gradient(135deg,#0d2d1a,#1a3a2a)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48,position:"relative"}}>
-              💇‍♀️
-              <div style={{position:"absolute",bottom:10,left:14,background:"rgba(0,0,0,.5)",borderRadius:99,padding:"3px 10px",fontSize:10,color:"#fff",fontWeight:600}}>
+            <div style={{height:160,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#0d2d1a,#1a3a2a)"}}>
+              {(tenant as any).coverUrl ? (
+                <img src={(tenant as any).coverUrl} alt={tenant.name}
+                  style={{width:"100%",height:"100%",objectFit:"cover",opacity:.85}} />
+              ) : (
+                <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48}}>
+                  {icon(tenant.services[0]?.category ?? "")}
+                </div>
+              )}
+              <div style={{position:"absolute",bottom:10,left:14,background:"rgba(0,0,0,.55)",borderRadius:99,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:600}}>
                 ★ {(tenant._count?.bookings ?? 0) > 0 ? "4.8" : "Nouveau"} · {tenant._count?.bookings ?? 0} réservation{(tenant._count?.bookings ?? 0) !== 1 ? "s" : ""}
               </div>
             </div>

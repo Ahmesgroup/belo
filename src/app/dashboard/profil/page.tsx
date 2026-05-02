@@ -13,7 +13,9 @@ export default function DashboardProfilPage() {
   const [address, setAddress] = useState("");
   const [city,    setCity]    = useState("");
   const [plan,    setPlan]    = useState("FREE");
-  const [socials, setSocials] = useState({ facebook:"", instagram:"", tiktok:"", website:"" });
+  const [socials,   setSocials]   = useState({ facebook:"", instagram:"", tiktok:"", website:"" });
+  const [coverUrl,  setCoverUrl]  = useState("");
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -32,7 +34,8 @@ export default function DashboardProfilPage() {
           setAddress(d.data.address ?? "");
           setCity(d.data.city ?? "");
           setPlan(d.data.plan ?? "FREE");
-          if (d.data.socials) setSocials({ facebook:"", instagram:"", tiktok:"", website:"", ...d.data.socials });
+          if (d.data.socials)  setSocials({ facebook:"", instagram:"", tiktok:"", website:"", ...d.data.socials });
+          if (d.data.coverUrl) setCoverUrl(d.data.coverUrl);
         }
       })
       .catch(() => {})
@@ -49,7 +52,7 @@ export default function DashboardProfilPage() {
       const res = await fetch(`/api/tenants/${user.tenantId}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ name, phone, address, city, socials }),
+        body:    JSON.stringify({ name, phone, address, city, socials, coverUrl }),
       });
       if (!res.ok) { const d = await res.json(); setError(d.error?.message ?? "Erreur."); return; }
       setSaved(true);
@@ -69,6 +72,34 @@ export default function DashboardProfilPage() {
         <div style={{padding:"24px",textAlign:"center",fontSize:13,color:"var(--text3)"}}>Chargement…</div>
       ) : (
         <form onSubmit={handleSave} style={{display:"flex",flexDirection:"column",gap:16}}>
+          {/* Photo de couverture */}
+          <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:12}}>Photo du salon</div>
+            <div style={{width:"100%",height:160,borderRadius:12,overflow:"hidden",background:"var(--card2)",border:"2px dashed var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10,position:"relative",cursor:"pointer"}}
+              onClick={()=>document.getElementById("cover-upload")?.click()}>
+              {coverUrl ? (
+                <img src={coverUrl} alt="Couverture" style={{width:"100%",height:"100%",objectFit:"cover"}} />
+              ) : (
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:32,marginBottom:6}}>📷</div>
+                  <div style={{fontSize:12,color:"var(--text3)"}}>Cliquez pour ajouter une photo<br/><span style={{fontSize:10}}>JPG, PNG, WebP — 5 MB max</span></div>
+                </div>
+              )}
+              {uploading && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13}}>Envoi en cours…</div>}
+            </div>
+            <input id="cover-upload" type="file" accept="image/*" title="Photo du salon" style={{display:"none"}}
+              onChange={async(e)=>{
+                const file=e.target.files?.[0]; if(!file) return;
+                setUploading(true);
+                const fd=new FormData(); fd.append("file",file);
+                const token=localStorage.getItem("belo_token");
+                const res=await fetch("/api/upload",{method:"POST",headers:{Authorization:`Bearer ${token}`},body:fd});
+                const data=await res.json(); setUploading(false);
+                if(data.data?.url) setCoverUrl(data.data.url);
+              }}/>
+            {coverUrl && <button type="button" onClick={()=>setCoverUrl("")} style={{fontSize:11,color:"var(--red)",background:"transparent",border:"none",cursor:"pointer"}}>× Supprimer la photo</button>}
+          </div>
+
           <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20,display:"flex",flexDirection:"column",gap:14}}>
             <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em"}}>Informations du salon</div>
 

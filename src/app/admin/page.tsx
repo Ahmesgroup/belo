@@ -13,8 +13,14 @@ export default function AdminPage() {
   const [tenants,  setTenants]  = useState<any[]>([]);
   const [stats,    setStats]    = useState<Record<string,number>>({});
   const [loading,  setLoading]  = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobile,     setIsMobile]     = useState(false);
+  const [menuOpen,     setMenuOpen]     = useState(false);
+  const [planConfigs,  setPlanConfigs]  = useState<any[]>([]);
+  const [editingPlan,  setEditingPlan]  = useState<string|null>(null);
+  const [editValues,   setEditValues]   = useState<any>({});
+  const [savingPlan,   setSavingPlan]   = useState(false);
+  const [planMsg,      setPlanMsg]      = useState("");
+  const [planStats,    setPlanStats]    = useState<any>({});
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -24,12 +30,29 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
+    const token = localStorage.getItem("belo_token");
+    if (!token) { router.replace("/login"); return; }
     const user = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? "{}"); } catch { return {}; } })();
-    if (!user?.id || (user.role !== "SUPER_ADMIN" && user.role !== "ADMIN")) {
-      router.replace("/");
-      return;
-    }
+    // If localStorage role is already admin — proceed
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return;
+    // Otherwise verify via API (localStorage might be stale)
+    fetch("/api/admin/tenants?pageSize=1", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => { if (r.status === 401 || r.status === 403) router.replace("/"); })
+      .catch(() => router.replace("/"));
   }, [router]);
+
+  useEffect(() => {
+    if (view !== 2) return;
+    const tok = localStorage.getItem("belo_token");
+    fetch("/api/plans").then(r=>r.json()).then(d=>setPlanConfigs(d.data?.plans??[]));
+    Promise.all([
+      fetch("/api/admin/tenants?plan=FREE&pageSize=1",    {headers:{Authorization:`Bearer ${tok}`}}).then(r=>r.json()),
+      fetch("/api/admin/tenants?plan=PRO&pageSize=1",     {headers:{Authorization:`Bearer ${tok}`}}).then(r=>r.json()),
+      fetch("/api/admin/tenants?plan=PREMIUM&pageSize=1", {headers:{Authorization:`Bearer ${tok}`}}).then(r=>r.json()),
+    ]).then(([f,p,pr])=>setPlanStats({
+      FREE:f.data?.pagination?.total??0, PRO:p.data?.pagination?.total??0, PREMIUM:pr.data?.pagination?.total??0,
+    }));
+  }, [view]);
 
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("belo_token") : null;
@@ -253,52 +276,66 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* PLANS VIEW */}
+          {/* PLANS VIEW — real data from DB */}
           {view === 2 && (
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
-              {[
-                { name:"Free", color:"var(--text3)", tenants:160, mrr:"0", limits:[["Bookings/mois","20"],["Services max","1"],["Photos/service","1"],["WhatsApp auto","❌"],["Acompte","❌"]], prices:{fcfa:"0",eur:"0"} },
-                { name:"Pro", color:"var(--blue)", tenants:93, mrr:"1 395 000", limits:[["Bookings/mois","500"],["Services max","20"],["Photos/service","10"],["WhatsApp auto","✅"],["Acompte","✅"]], prices:{fcfa:"15000",eur:"23"} },
-                { name:"Premium", color:"var(--g2)", tenants:87, mrr:"3 045 000", limits:[["Bookings/mois","∞"],["Services max","∞"],["Photos/service","50"],["WhatsApp auto","✅"],["Multi-staff","✅"]], prices:{fcfa:"35000",eur:"53"} },
-              ].map(p => (
-                <div key={p.name} style={{background:"var(--card)",border:`1px solid ${p.color==="var(--g2)"?"rgba(34,211,138,.25)":p.color==="var(--blue)"?"rgba(59,126,246,.2)":"var(--border)"}`,borderRadius:12,overflow:"hidden"}}>
-                  <div style={{padding:14,borderBottom:"1px solid var(--border)"}}>
-                    <div style={{fontFamily:"var(--serif)",fontWeight:800,fontSize:16,color:p.color,marginBottom:4}}>{p.name}</div>
-                    <div style={{fontSize:11,color:"var(--text3)"}}>{p.tenants} salons · MRR {p.mrr} F</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:10}}>
-                      <div style={{background:"rgba(255,255,255,.03)",borderRadius:7,padding:8,textAlign:"center"}}>
-                        <div style={{fontFamily:"var(--serif)",fontSize:16,fontWeight:800,color:p.color}}>{p.tenants}</div>
-                        <div style={{fontSize:9,color:"var(--text3)",marginTop:2}}>Tenants</div>
+            <div>
+              {planConfigs.length === 0 && (
+                <div style={{textAlign:"center",padding:"40px 0",color:"var(--text3)",fontSize:13}}>Chargement des prix…</div>
+              )}
+              {planConfigs.map(config => {
+                const isEditing = editingPlan === config.plan;
+                return (
+                  <div key={config.plan} style={{background:"var(--card)",borderRadius:14,padding:18,border:"1px solid var(--border)",marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                      <div>
+                        <span style={{fontWeight:700,fontSize:16,color:"var(--text)"}}>{config.plan}</span>
+                        <span style={{marginLeft:10,fontSize:12,color:"var(--text3)"}}>{planStats[config.plan]??0} salons</span>
                       </div>
-                      <div style={{background:"rgba(255,255,255,.03)",borderRadius:7,padding:8,textAlign:"center"}}>
-                        <div style={{fontFamily:"var(--serif)",fontSize:14,fontWeight:800,color:p.color}}>{p.mrr.split(" ")[0]}k</div>
-                        <div style={{fontSize:9,color:"var(--text3)",marginTop:2}}>MRR</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{padding:14}}>
-                    <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",letterSpacing:".08em",textTransform:"uppercase",marginBottom:8}}>Limites</div>
-                    {p.limits.map(([label,val]) => (
-                      <div key={label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.04)",fontSize:11}}>
-                        <span style={{color:"var(--text3)"}}>{label}</span>
-                        <div style={{display:"flex",alignItems:"center",gap:5}}>
-                          <input defaultValue={val} disabled={val==="❌"||val==="✅"||val==="∞"} style={{width:60,textAlign:"right",fontSize:11,fontWeight:700,padding:"3px 7px",background:"rgba(255,255,255,.06)",border:"1px solid var(--border2)",borderRadius:5,color:"var(--text)"}} />
-                          <button onClick={() => toast("✅ Limite mise à jour")} style={{padding:"3px 7px",borderRadius:5,border:"none",background:"rgba(34,211,138,.12)",color:"var(--g2)",fontSize:8,fontWeight:700,cursor:"pointer"}}>OK</button>
+                      {!isEditing ? (
+                        <button onClick={()=>{setEditingPlan(config.plan);setEditValues({priceFcfa:config.priceFcfa,priceEur:config.priceEur,priceUsd:config.priceUsd,priceFcfaAnnual:config.priceFcfaAnnual,priceEurAnnual:config.priceEurAnnual,priceUsdAnnual:config.priceUsdAnnual});}}
+                          style={{fontSize:11,padding:"5px 12px",borderRadius:7,background:"var(--card2)",border:"1px solid var(--border2)",color:"var(--text2)",cursor:"pointer"}}>
+                          ✏️ Modifier les prix
+                        </button>
+                      ) : (
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={()=>setEditingPlan(null)} style={{fontSize:11,padding:"5px 12px",borderRadius:7,background:"transparent",border:"1px solid var(--border2)",color:"var(--text3)",cursor:"pointer"}}>Annuler</button>
+                          <button onClick={async()=>{
+                            setSavingPlan(true);
+                            const tok=localStorage.getItem("belo_token");
+                            const res=await fetch("/api/plans",{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${tok}`},body:JSON.stringify({plan:config.plan,...editValues})});
+                            setSavingPlan(false);
+                            if(res.ok){setPlanMsg("✓ Prix mis à jour");setEditingPlan(null);fetch("/api/plans").then(r=>r.json()).then(d=>setPlanConfigs(d.data?.plans??[]));setTimeout(()=>setPlanMsg(""),4000);}
+                          }} disabled={savingPlan} style={{fontSize:11,padding:"5px 12px",borderRadius:7,background:"var(--g2)",border:"none",color:"#000",fontWeight:700,cursor:"pointer"}}>
+                            {savingPlan?"…":"Enregistrer"}
+                          </button>
                         </div>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
+                        {[["Prix mensuel FCFA","priceFcfa"],["Prix mensuel EUR","priceEur"],["Prix mensuel USD","priceUsd"],["Prix annuel FCFA","priceFcfaAnnual"],["Prix annuel EUR","priceEurAnnual"],["Prix annuel USD","priceUsdAnnual"]].map(([label,key])=>(
+                          <div key={key}>
+                            <div style={{fontSize:10,color:"var(--text3)",marginBottom:4}}>{label}</div>
+                            <input type="number" title={label} value={editValues[key]??0}
+                              onChange={e=>setEditValues((v:any)=>({...v,[key]:parseInt(e.target.value)||0}))}
+                              style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--bg2)",color:"var(--text)",fontSize:13}}/>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",letterSpacing:".08em",textTransform:"uppercase",margin:"12px 0 8px"}}>Prix</div>
-                    {[["🇸🇳","FCFA",p.prices.fcfa],["🇪🇺","EUR",p.prices.eur]].map(([flag,curr,val]) => (
-                      <div key={curr as string} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,fontSize:11}}>
-                        <span style={{width:16}}>{flag}</span>
-                        <span style={{flex:1,color:"var(--text3)"}}>{curr}</span>
-                        <input defaultValue={val as string} style={{width:80,textAlign:"right",fontSize:11,fontWeight:700,padding:"4px 8px",background:"rgba(255,255,255,.05)",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text)"}} />
+                    ) : (
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                        {[["Mensuel FCFA",config.priceFcfa.toLocaleString("fr")+" F"],["EUR",config.priceEur+" €"],["USD","$"+config.priceUsd],["Annuel FCFA",config.priceFcfaAnnual.toLocaleString("fr")+" F"],["EUR ann.",config.priceEurAnnual+" €"],["USD ann.","$"+config.priceUsdAnnual]].map(([label,val])=>(
+                          <div key={label} style={{background:"var(--bg2)",borderRadius:8,padding:"8px 10px"}}>
+                            <div style={{fontSize:9,color:"var(--text3)",marginBottom:2}}>{label}</div>
+                            <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{val}</div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    <button onClick={() => toast(`✅ Plan ${p.name} mis à jour`)} style={{width:"100%",padding:10,borderRadius:9,border:"none",background:"var(--g)",color:"#fff",fontFamily:"var(--serif)",fontWeight:700,fontSize:12,cursor:"pointer",marginTop:12}}>Enregistrer</button>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              {planMsg && <div style={{background:"rgba(34,211,138,.1)",border:"1px solid rgba(34,211,138,.3)",borderRadius:10,padding:"12px 16px",color:"var(--g2)",fontSize:13}}>{planMsg}</div>}
             </div>
           )}
 
