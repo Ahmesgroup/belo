@@ -13,6 +13,7 @@ export default function DashboardProfilPage() {
   const [address, setAddress] = useState("");
   const [city,    setCity]    = useState("");
   const [plan,    setPlan]    = useState("FREE");
+  const [socials, setSocials] = useState({ facebook:"", instagram:"", tiktok:"", website:"" });
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -31,6 +32,7 @@ export default function DashboardProfilPage() {
           setAddress(d.data.address ?? "");
           setCity(d.data.city ?? "");
           setPlan(d.data.plan ?? "FREE");
+          if (d.data.socials) setSocials({ facebook:"", instagram:"", tiktok:"", website:"", ...d.data.socials });
         }
       })
       .catch(() => {})
@@ -47,7 +49,7 @@ export default function DashboardProfilPage() {
       const res = await fetch(`/api/tenants/${user.tenantId}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ name, phone, address, city }),
+        body:    JSON.stringify({ name, phone, address, city, socials }),
       });
       if (!res.ok) { const d = await res.json(); setError(d.error?.message ?? "Erreur."); return; }
       setSaved(true);
@@ -82,6 +84,26 @@ export default function DashboardProfilPage() {
                   type={f.type} value={f.value} placeholder={f.placeholder}
                   onChange={e => f.set(e.target.value)}
                   style={{width:"100%",padding:"10px 12px",borderRadius:9,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Social links */}
+          <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:14}}>Réseaux sociaux</div>
+            {[
+              {key:"instagram", label:"Instagram", placeholder:"https://instagram.com/monsalon", icon:"📷"},
+              {key:"facebook",  label:"Facebook",  placeholder:"https://facebook.com/monsalon", icon:"👤"},
+              {key:"tiktok",    label:"TikTok",    placeholder:"https://tiktok.com/@monsalon",  icon:"🎵"},
+              {key:"website",   label:"Site web",  placeholder:"https://monsalon.com",           icon:"🌐"},
+            ].map(({key,label,placeholder,icon}) => (
+              <div key={key} style={{marginBottom:12}}>
+                <label style={{fontSize:11,color:"var(--text3)",display:"block",marginBottom:4}}>{icon} {label}</label>
+                <input type="url" placeholder={placeholder}
+                  value={(socials as Record<string,string>)[key] ?? ""}
+                  onChange={e => setSocials(prev => ({...prev, [key]: e.target.value}))}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:9,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}}
                 />
               </div>
             ))}

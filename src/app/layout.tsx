@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: { default: "Belo — La beauté réservée en 45 secondes", template: "%s | Belo" },
   description: "Réservez les meilleurs salons de beauté au Sénégal. Wave · Orange Money · WhatsApp.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  manifest: "/manifest.json",
   keywords: ["salon", "beauté", "coiffure", "Dakar", "Sénégal", "réservation"],
   openGraph: {
     title: "Belo — La beauté réservée en 45 secondes",
@@ -17,6 +18,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
+      <head>
+        <script dangerouslySetInnerHTML={{__html:`try{var t=localStorage.getItem('belo_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}`}} />
+      </head>
       <body>{children}</body>
     </html>
   );

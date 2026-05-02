@@ -4,7 +4,15 @@ import { DashboardNav } from "@/components/ui/Nav";
 import { fetchWithRetry } from "@/lib/fetch-with-retry";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [plan, setPlan] = useState<"FREE" | "PRO" | "PREMIUM">("FREE");
+  const [plan,     setPlan]     = useState<"FREE" | "PRO" | "PREMIUM">("FREE");
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const fetchTenant = useCallback(() => {
     const token = localStorage.getItem("belo_token");
@@ -23,7 +31,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [fetchTenant]);
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <div style={{ display:"flex", flexDirection: isMobile ? "column" : "row", minHeight:"100vh", height: isMobile ? "auto" : "100vh", overflow: isMobile ? "visible" : "hidden" }}>
       <DashboardNav plan={plan} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>

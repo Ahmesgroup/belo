@@ -1,0 +1,13 @@
+{
+  "name": "Belo — Réservez votre salon",
+  "short_name": "Belo",
+  "description": "Réservez les meilleurs salons de beauté au Sénégal en 45 secondes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070b10",
+  "theme_color": "#22d38a",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

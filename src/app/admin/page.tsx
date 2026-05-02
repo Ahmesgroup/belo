@@ -1,16 +1,35 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 
 const VIEWS = ["Mission Control","Tenants","Plans","Fraude","Équipe","Logs","Réglages"];
 
 export default function AdminPage() {
-  const [view, setView] = useState(0);
-  const [toasts, setToasts] = useState<{id:number;msg:string}[]>([]);
-  const [tenants, setTenants] = useState<any[]>([]);
-  const [stats,   setStats]   = useState<Record<string,number>>({});
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const [view,     setView]     = useState(0);
+  const [toasts,   setToasts]   = useState<{id:number;msg:string}[]>([]);
+  const [tenants,  setTenants]  = useState<any[]>([]);
+  const [stats,    setStats]    = useState<Record<string,number>>({});
+  const [loading,  setLoading]  = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    const user = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? "{}"); } catch { return {}; } })();
+    if (!user?.id || (user.role !== "SUPER_ADMIN" && user.role !== "ADMIN")) {
+      router.replace("/");
+      return;
+    }
+  }, [router]);
 
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("belo_token") : null;

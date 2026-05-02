@@ -3,7 +3,7 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root, :root[data-theme="dark"] {
   --bg:#06090d; --bg2:#0b0f16; --card:#0f1520; --card2:#131d2a;
   --border:#1a2332; --border2:#243040;
   --g:#0d9e6e; --g2:#22d38a; --g3:#16a374; --g-glow:rgba(34,211,138,0.12);
@@ -12,6 +12,16 @@
   --text:#f0f4f8; --text2:#a0b0c0; --text3:#506070;
   --serif:'Sora',sans-serif; --sans:'DM Sans',sans-serif;
   --r:12px; --r2:16px;
+  --shadow:0 4px 24px rgba(0,0,0,.4);
+}
+:root[data-theme="light"] {
+  --bg:#f5f3ef; --bg2:#ffffff; --card:#ffffff; --card2:#f0eeea;
+  --border:rgba(0,0,0,.08); --border2:rgba(0,0,0,.14);
+  --g:#0d9e6e; --g2:#0d9e6e; --g3:#0a8a5e; --g-glow:rgba(13,158,110,0.10);
+  --purple:#7c3aed; --purple2:#6d28d9;
+  --amber:#d97706; --red:#dc2626; --blue:#2563eb;
+  --text:#111827; --text2:#374151; --text3:#9ca3af;
+  --shadow:0 4px 24px rgba(0,0,0,.1);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}

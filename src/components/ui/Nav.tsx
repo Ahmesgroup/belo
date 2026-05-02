@@ -28,6 +28,21 @@ export function PublicNav() {
     window.location.href = "/";
   }
 
+  const [theme, setTheme] = useState<"dark"|"light">("dark");
+
+  useEffect(() => {
+    const saved = (localStorage.getItem("belo_theme") ?? "dark") as "dark"|"light";
+    setTheme(saved);
+    document.documentElement.setAttribute("data-theme", saved);
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("belo_theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+  }
+
   const initial      = user?.name?.charAt(0).toUpperCase() ?? "?";
   const role         = user?.role ?? "";
   const destAccount  = role === "OWNER" || role === "STAFF" ? "/dashboard"
@@ -55,6 +70,10 @@ export function PublicNav() {
           )}
           {isMobile && <div style={{flex:1}} />}
           <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:12}}>
+            <button onClick={toggleTheme} title={theme==="dark"?"Mode clair":"Mode sombre"}
+              style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 9px",fontSize:14,cursor:"pointer",color:"var(--text2)",lineHeight:1,flexShrink:0}}>
+              {theme==="dark" ? "☀️" : "🌙"}
+            </button>
             {user ? (
               <>
                 <Link href={destAccount} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 12px",borderRadius:9,fontSize:12,fontWeight:600,background:"rgba(34,211,138,.1)",border:"1px solid rgba(34,211,138,.2)",color:"var(--g2)",textDecoration:"none"}}>
@@ -84,11 +103,12 @@ export function DashboardNav({ plan = "FREE" }: { plan?: "FREE" | "PRO" | "PREMI
   const pathname = usePathname();
 
   const links = [
-    { href: "/dashboard", icon: "▦",  label: "Dashboard" },
-    { href: "/dashboard/bookings",  icon: "📅", label: "Réservations" },
-    { href: "/dashboard/services",  icon: "✂️", label: "Services" },
-    { href: "/dashboard/horaires",  icon: "🕐", label: "Horaires" },
-    { href: "/dashboard/profil",    icon: "👤", label: "Mon profil" },
+    { href: "/dashboard",          icon: "▦",  label: "Dashboard" },
+    { href: "/dashboard/bookings", icon: "📅", label: "Réservations" },
+    { href: "/dashboard/services", icon: "✂️", label: "Services" },
+    { href: "/dashboard/horaires", icon: "🕐", label: "Horaires" },
+    { href: "/dashboard/profil",   icon: "👤", label: "Mon profil" },
+    ...(plan === "PREMIUM" ? [{ href: "/dashboard/equipe", icon: "👥", label: "Équipe" }] : []),
   ];
 
   const planColors: Record<string, string> = {

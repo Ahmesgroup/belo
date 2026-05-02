@@ -456,3 +456,16 @@ model AuditLog {
   @@index([action])
   @@index([action, entityId, createdAt])
 }
+
+model PlanConfig {
+  id              String   @id @default(cuid())
+  plan            String   @unique  // "FREE" | "PRO" | "PREMIUM"
+  priceFcfa       Int      @default(0)
+  priceEur        Int      @default(0)
+  priceUsd        Int      @default(0)
+  priceFcfaAnnual Int      @default(0)
+  priceEurAnnual  Int      @default(0)
+  priceUsdAnnual  Int      @default(0)
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+}

@@ -69,6 +69,7 @@ const PatchSchema = z.object({
   city:     z.string().optional(),
   email:    z.string().email().optional(),
   horaires: z.array(HorairesDay).length(7).optional(),
+  socials:  z.record(z.string()).optional(),
 }).partial();
 
 export async function PATCH(

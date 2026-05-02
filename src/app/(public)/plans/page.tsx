@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PublicNav } from "@/components/ui/Nav";
 import Link from "next/link";
 
@@ -54,9 +54,38 @@ const PLANS = [
   },
 ];
 
+const DEFAULT_PRICES: Record<string, {monthly:{fcfa:number,eur:number,usd:number},annual:{fcfa:number,eur:number,usd:number}}> = {
+  FREE:    { monthly:{fcfa:0,eur:0,usd:0},     annual:{fcfa:0,eur:0,usd:0}     },
+  PRO:     { monthly:{fcfa:15000,eur:23,usd:25}, annual:{fcfa:12500,eur:19,usd:21} },
+  PREMIUM: { monthly:{fcfa:35000,eur:53,usd:58}, annual:{fcfa:29167,eur:44,usd:48} },
+};
+
 export default function PlansPage() {
-  const [period, setPeriod] = useState<"monthly"|"annual">("monthly");
-  const [currency, setCurrency] = useState<"fcfa"|"eur"|"usd">("fcfa");
+  const [period,     setPeriod]     = useState<"monthly"|"annual">("monthly");
+  const [currency,   setCurrency]   = useState<"fcfa"|"eur"|"usd">("fcfa");
+  const [planPrices, setPlanPrices] = useState(DEFAULT_PRICES);
+
+  useEffect(() => {
+    fetch("/api/plans")
+      .then(r => r.json())
+      .then(d => {
+        if (!d.data?.plans) return;
+        const map: typeof DEFAULT_PRICES = {} as any;
+        d.data.plans.forEach((p: any) => {
+          map[p.plan] = {
+            monthly: { fcfa: p.priceFcfa,       eur: p.priceEur,       usd: p.priceUsd       },
+            annual:  { fcfa: p.priceFcfaAnnual, eur: p.priceEurAnnual, usd: p.priceUsdAnnual },
+          };
+        });
+        setPlanPrices(prev => ({ ...prev, ...map }));
+      })
+      .catch(() => {});
+  }, []);
+
+  const PLANS_WITH_PRICES = PLANS.map(p => ({
+    ...p,
+    prices: planPrices[p.id.toUpperCase()] ?? p.prices,
+  }));
 
   function price(p: typeof PLANS[0]) {
     const v = p.prices[period][currency];
@@ -96,7 +125,7 @@ export default function PlansPage() {
 
           {/* Plan cards */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:40}}>
-            {PLANS.map(p => (
+            {PLANS_WITH_PRICES.map(p => (
               <div key={p.id} style={{background:"var(--card)",border:`1px solid ${p.id==="pro"?"rgba(59,126,246,.4)":p.id==="premium"?"rgba(144,96,232,.4)":"var(--border)"}`,borderRadius:20,padding:"28px 24px",textAlign:"left",position:"relative",transition:".25s"}}>
                 {p.featured && <div style={{position:"absolute",top:-1,left:"50%",transform:"translateX(-50%)",background:"var(--blue)",color:"#fff",fontSize:10,fontWeight:700,padding:"4px 14px",borderRadius:"0 0 10px 10px",letterSpacing:".05em"}}>RECOMMANDÉ</div>}
                 <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--text3)",marginBottom:12}}>{p.icon} {p.name}</div>
