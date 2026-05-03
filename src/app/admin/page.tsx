@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken, getUser, authHeaders, jsonAuthHeaders } from "@/lib/auth-client";
+import { ADMIN_ROLES } from "@/lib/auth-guard";
 
 
 const VIEWS = ["Mission Control","Tenants","Plans","Fraude","Équipe","Logs","Réglages"];
@@ -23,6 +24,7 @@ export default function AdminPage() {
   const [savingPlan,   setSavingPlan]   = useState(false);
   const [planMsg,      setPlanMsg]      = useState("");
   const [planStats,    setPlanStats]    = useState<any>({});
+  const [adminDate,    setAdminDate]    = useState("");
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -32,11 +34,21 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const token = getToken();
-    const user  = getUser();
+    setAdminDate(new Date().toLocaleDateString("fr-FR", {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+    }));
+  }, []);
 
-    if (!token || !user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") { router.replace("/"); return; }
+  useEffect(() => {
+    const user  = getUser();
+    const token = getToken();
+
+    if (!user || !token) { router.replace("/login"); return; }
+
+    if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+      router.replace("/");
+      return;
+    }
 
     setAdminOk(true);
     fetchAdminData(token);
@@ -53,6 +65,26 @@ export default function AdminPage() {
       FREE:f.data?.pagination?.total??0, PRO:p.data?.pagination?.total??0, PREMIUM:pr.data?.pagination?.total??0,
     }));
   }, [view]);
+
+  async function adminAction(tenantId: string, action: string, extra?: Record<string, unknown>) {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/admin/tenants?action=do-action&id=${encodeURIComponent(tenantId)}`, {
+        method: "POST",
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({ action, ...extra }),
+      });
+      if (res.ok) {
+        fetchAdminData(token);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast(`Erreur: ${(d as any).error?.message ?? res.status}`);
+      }
+    } catch {
+      toast("Erreur réseau");
+    }
+  }
 
   function fetchAdminData(token: string) {
     setLoading(true);
@@ -79,7 +111,7 @@ export default function AdminPage() {
 
   const statusBadge = (s:string) => {
     const c: Record<string, [string,string]> = { active:["rgba(34,211,138,.1)","var(--g2)"], pending:["rgba(245,166,35,.1)","var(--amber)"], blocked:["rgba(239,68,68,.1)","var(--red)"], fraud:["rgba(239,68,68,.18)","var(--red)"] };
-    const [bg,color] = c[s] ?? c.active;
+    const [bg,color] = c[s.toLowerCase()] ?? c.active;
     return <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:99,background:bg,color}}>{s.toUpperCase()}</span>;
   };
 
@@ -152,7 +184,7 @@ export default function AdminPage() {
         <div style={{padding:"10px 20px",borderBottom:"1px solid var(--border)",background:"var(--card2)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
           <div>
             <div style={{fontFamily:"var(--serif)",fontWeight:700,fontSize:14}}>{VIEWS[view]}</div>
-            <div style={{fontSize:10,color:"var(--text3)"}}>Belo Admin · {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+            <div style={{fontSize:10,color:"var(--text3)"}}>Belo Admin · {adminDate}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:"var(--g2)",background:"rgba(34,211,138,.07)",border:"1px solid rgba(34,211,138,.15)",padding:"3px 10px",borderRadius:99}}>
@@ -271,7 +303,7 @@ export default function AdminPage() {
                   {loading && <tr><td colSpan={9} style={{padding:"20px",textAlign:"center",fontSize:12,color:"var(--text3)"}}>Chargement…</td></tr>}
                   {!loading && tenants.length === 0 && <tr><td colSpan={9} style={{padding:"20px",textAlign:"center",fontSize:12,color:"var(--text3)"}}>Aucun salon trouvé.</td></tr>}
                   {tenants.map((t,i) => (
-                    <tr key={i} style={{borderTop:"1px solid rgba(255,255,255,.03)",background:t.status==="fraud"?"rgba(239,68,68,.02)":"transparent",cursor:"pointer"}}>
+                    <tr key={i} style={{borderTop:"1px solid rgba(255,255,255,.03)",background:t.status==="FRAUD"?"rgba(239,68,68,.02)":"transparent",cursor:"pointer"}}>
                       <td style={{padding:"9px 11px"}}><input type="checkbox" aria-label={`Sélectionner ${t.name}`} style={{width:13,height:13,accentColor:"var(--g2)"}} /></td>
                       <td style={{padding:"9px 11px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -290,13 +322,14 @@ export default function AdminPage() {
                       </td>
                       <td style={{padding:"9px 11px"}}>
                         <div style={{display:"flex",gap:3}}>
-                          {["FREE","PRO","PREM"].map(p => <button key={p} onClick={() => toast(`Plan → ${p}`)} style={{padding:"3px 8px",borderRadius:5,border:`1px solid ${p==="FREE"?"var(--border2)":p==="PRO"?"rgba(59,126,246,.3)":"rgba(144,96,232,.3)"}`,background:p==="FREE"?"transparent":p==="PRO"?"rgba(59,126,246,.06)":"rgba(144,96,232,.06)",color:p==="FREE"?"var(--text3)":p==="PRO"?"var(--blue)":"var(--purple)",fontSize:9,fontWeight:600,cursor:"pointer",transition:".15s"}}>{p}</button>)}
+                          {["FREE","PRO","PREMIUM"].map(p => <button key={p} onClick={() => adminAction(t.id, "change_plan", { newPlan: p })} style={{padding:"3px 8px",borderRadius:5,border:`1px solid ${p==="FREE"?"var(--border2)":p==="PRO"?"rgba(59,126,246,.3)":"rgba(144,96,232,.3)"}`,background:p==="FREE"?"transparent":p==="PRO"?"rgba(59,126,246,.06)":"rgba(144,96,232,.06)",color:p==="FREE"?"var(--text3)":p==="PRO"?"var(--blue)":"var(--purple)",fontSize:9,fontWeight:600,cursor:"pointer",transition:".15s"}}>{p}</button>)}
                         </div>
                       </td>
                       <td style={{padding:"9px 11px"}}>
                         <div style={{display:"flex",gap:3}}>
                           <button onClick={() => toast("Fiche salon ouverte")} style={{padding:"3px 8px",borderRadius:5,border:"none",fontSize:9,fontWeight:600,cursor:"pointer",background:"rgba(255,255,255,.06)",color:"var(--text3)"}}>Voir</button>
-                          {t.status==="blocked" ? <button onClick={() => toast("✅ Réactivé")} style={{padding:"3px 8px",borderRadius:5,border:"none",fontSize:9,fontWeight:600,cursor:"pointer",background:"rgba(34,211,138,.1)",color:"var(--g2)"}}>Réactiver</button> : <button onClick={() => toast("🚫 Bloqué")} style={{padding:"3px 8px",borderRadius:5,border:"none",fontSize:9,fontWeight:600,cursor:"pointer",background:"rgba(239,68,68,.1)",color:"var(--red)"}}>Bloquer</button>}
+                          {t.status==="PENDING" && <button onClick={() => adminAction(t.id, "validate")} style={{padding:"3px 8px",borderRadius:5,border:"none",fontSize:9,fontWeight:600,cursor:"pointer",background:"rgba(34,211,138,.1)",color:"var(--g2)"}}>Valider</button>}
+                          {t.status==="BLOCKED" ? <button onClick={() => adminAction(t.id, "reactivate")} style={{padding:"3px 8px",borderRadius:5,border:"none",fontSize:9,fontWeight:600,cursor:"pointer",background:"rgba(34,211,138,.1)",color:"var(--g2)"}}>Réactiver</button> : t.status!=="PENDING" && <button onClick={() => adminAction(t.id, "block")} style={{padding:"3px 8px",borderRadius:5,border:"none",fontSize:9,fontWeight:600,cursor:"pointer",background:"rgba(239,68,68,.1)",color:"var(--red)"}}>Bloquer</button>}
                         </div>
                       </td>
                     </tr>

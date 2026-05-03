@@ -78,7 +78,11 @@ export function isAdmin(): boolean {
  */
 export function authHeaders(): Record<string, string> {
   const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (!token) {
+    console.warn("[belo] No auth token found");
+    return {};
+  }
+  return { Authorization: `Bearer ${token}` };
 }
 
 /**

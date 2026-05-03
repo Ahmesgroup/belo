@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth, withRole, withTenant } from "@/middleware";
+import { withAuth, withRole, withTenant } from "@/lib/route-auth";
 import { handleRouteError } from "@/shared/errors";
+
+type RouteCtx = { params: Promise<{ id: string }> };
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: RouteCtx
 ) {
   try {
+    const { id } = await params;
     const service = await prisma.service.findUnique({
-      where:  { id: params.id },
+      where:  { id },
       select: {
         id: true, name: true, category: true, priceCents: true, durationMin: true,
         photos: true, isActive: true,
@@ -34,15 +37,16 @@ const PatchServiceSchema = z.object({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: RouteCtx
 ) {
   try {
+    const { id } = await params;
     const auth = await withAuth(req);
     const roleCheck = withRole(auth, ["OWNER", "STAFF", "ADMIN", "SUPER_ADMIN"]);
     if (!roleCheck.ok) return roleCheck.response;
 
     const existing = await prisma.service.findUnique({
-      where:  { id: params.id },
+      where:  { id },
       select: { tenantId: true },
     });
     if (!existing) return NextResponse.json({ error: { code: "NOT_FOUND" } }, { status: 404 });
@@ -57,7 +61,7 @@ export async function PATCH(
     if (!parsed.success) return NextResponse.json({ error: { code: "VALIDATION_ERROR" } }, { status: 422 });
 
     const updated = await prisma.service.update({
-      where:  { id: params.id },
+      where:  { id },
       data:   parsed.data,
       select: { id: true, name: true, category: true, priceCents: true, durationMin: true, isActive: true },
     });
@@ -69,15 +73,16 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: RouteCtx
 ) {
   try {
+    const { id } = await params;
     const auth = await withAuth(req);
     const roleCheck = withRole(auth, ["OWNER", "ADMIN", "SUPER_ADMIN"]);
     if (!roleCheck.ok) return roleCheck.response;
 
     const existing = await prisma.service.findUnique({
-      where:  { id: params.id },
+      where:  { id },
       select: { tenantId: true },
     });
     if (!existing) return NextResponse.json({ error: { code: "NOT_FOUND" } }, { status: 404 });
@@ -85,7 +90,7 @@ export async function DELETE(
     const tenantCheck = withTenant(auth, existing.tenantId);
     if (!tenantCheck.ok) return tenantCheck.response;
 
-    await prisma.service.update({ where: { id: params.id }, data: { isActive: false } });
+    await prisma.service.update({ where: { id }, data: { isActive: false } });
     return NextResponse.json({ data: { deleted: true } });
   } catch (err) {
     return handleRouteError(err);

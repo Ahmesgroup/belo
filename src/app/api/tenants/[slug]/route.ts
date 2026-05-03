@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth, withRole } from "@/middleware";
+import { withAuth, withRole } from "@/lib/route-auth";
 import { handleRouteError, AppErrors } from "@/shared/errors";
+
+type RouteCtx = { params: Promise<{ slug: string }> };
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: RouteCtx
 ) {
   try {
+    const { slug } = await params;
     const tenant = await prisma.tenant.findFirst({
       where: {
-        OR: [{ id: params.slug }, { slug: params.slug }],
+        OR: [{ id: slug }, { slug }],
         status: "ACTIVE",
       },
       select: {
@@ -75,9 +78,10 @@ const PatchSchema = z.object({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: RouteCtx
 ) {
   try {
+    const { slug } = await params;
     const auth = await withAuth(req);
     const roleCheck = withRole(auth, ["OWNER", "STAFF", "ADMIN", "SUPER_ADMIN"]);
     if (!roleCheck.ok) return roleCheck.response;
@@ -94,7 +98,7 @@ export async function PATCH(
     }
 
     const existing = await prisma.tenant.findFirst({
-      where: { OR: [{ id: params.slug }, { slug: params.slug }] },
+      where: { OR: [{ id: slug }, { slug }] },
       select: { id: true },
     });
     if (!existing) return NextResponse.json(AppErrors.TENANT_NOT_FOUND().toJSON(), { status: 404 });

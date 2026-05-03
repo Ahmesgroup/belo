@@ -1,13 +1,24 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { PublicNav } from "@/components/ui/Nav";
+import { PhoneInput, buildFullPhone, splitPhone } from "@/components/ui/PhoneInput";
+import { canUsePayment } from "@/lib/payment";
 import Link from "next/link";
 
 type Service = { id: string; name: string; category: string; priceCents: number; durationMin: number; photos: string[] };
 type Slot    = { id: string; startsAt: string; endsAt: string; isAvailable: boolean };
-type Tenant  = { id: string; name: string; slug: string; city: string | null; plan: string; coverUrl?: string | null; depositEnabled: boolean; depositPercent: number; services: Service[]; _count?: { bookings: number } };
+type Tenant  = {
+  id: string; name: string; slug: string; city: string | null; plan: string;
+  coverUrl?: string | null; depositEnabled: boolean; depositPercent: number;
+  services: Service[]; _count?: { bookings: number };
+};
 
-const ICONS: Record<string, string> = { hair:"💇‍♀️", HAIR:"💇‍♀️", nails:"💅", NAILS:"💅", massage:"💆‍♀️", MASSAGE:"💆‍♀️", barber:"✂️", BARBER:"✂️", spa:"🧖‍♀️", SPA:"🧖‍♀️", other:"✦", OTHER:"✦", beauty:"🧴", BEAUTY:"🧴", makeup:"💄", MAKEUP:"💄" };
+const ICONS: Record<string, string> = {
+  hair:"💇‍♀️", HAIR:"💇‍♀️", nails:"💅", NAILS:"💅",
+  massage:"💆‍♀️", MASSAGE:"💆‍♀️", barber:"✂️", BARBER:"✂️",
+  spa:"🧖‍♀️", SPA:"🧖‍♀️", other:"✦", OTHER:"✦",
+  beauty:"🧴", BEAUTY:"🧴", makeup:"💄", MAKEUP:"💄",
+};
 const icon = (cat: string) => ICONS[cat] ?? "✦";
 
 function fmt(min: number) { return min >= 60 ? `${Math.floor(min/60)}h${min%60?String(min%60).padStart(2,"0"):""}` : `${min}min`; }
@@ -21,37 +32,50 @@ function genDates() {
   });
 }
 
-export default function BookingPage({ params }: { params: { slug: string } }) {
+// ── Next.js 15/16: params is a Promise for page components ────
+export default function BookingPage({ params }: { params: Promise<{ slug: string }> }) {
+  // use() unwraps the Promise synchronously within React's Suspense protocol.
+  // The component suspends while the Promise is pending, then re-renders with
+  // the resolved value — no useEffect needed for slug.
+  const { slug } = use(params);
+
   const dates = genDates();
-  const [tenant,     setTenant]     = useState<Tenant | null>(null);
-  const [loadErr,    setLoadErr]    = useState("");
-  const [slots,      setSlots]      = useState<Slot[]>([]);
+
+  const [tenant,       setTenant]       = useState<Tenant | null>(null);
+  const [loadErr,      setLoadErr]      = useState("");
+  const [slots,        setSlots]        = useState<Slot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
-  const [step,       setStep]       = useState(1);
-  const [svc,        setSvc]        = useState<Service | null>(null);
-  const [slot,       setSlot]       = useState<Slot | null>(null);
-  const [dateStr,    setDateStr]    = useState(dates[0].dateStr);
-  const [phone,      setPhone]      = useState(() => {
-    if (typeof window === "undefined") return "";
-    try {
-      const user = JSON.parse(localStorage.getItem("belo_user") ?? "{}");
-      return (user.phone ?? "").replace(/^\+221/, "");
-    } catch { return ""; }
-  });
-  const [note,       setNote]       = useState("");
-  const [payMethod,  setPayMethod]  = useState("wave");
-  const [booking,    setBooking]    = useState<boolean>(false);
-  const [bookingErr, setBookingErr] = useState("");
-  const [done,       setDone]       = useState(false);
-  const [bookingRef, setBookingRef] = useState("");
+  const [step,        setStep]        = useState(1);
+  const [svc,         setSvc]         = useState<Service | null>(null);
+  const [slot,        setSlot]        = useState<Slot | null>(null);
+  const [dateStr,     setDateStr]     = useState(dates[0].dateStr);
+  const [countryCode, setCountryCode] = useState("221");
+  const [phone,       setPhone]       = useState("");
+  const [note,        setNote]        = useState("");
+  const [payMethod,   setPayMethod]   = useState("wave");
+  const [booking,     setBooking]     = useState(false);
+  const [bookingErr,  setBookingErr]  = useState("");
+  const [done,        setDone]        = useState(false);
+  const [bookingRef,  setBookingRef]  = useState("");
 
-  // Load tenant + services (with 5s timeout)
+  // Pre-fill phone from saved user profile (client-only)
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("belo_user") ?? "{}");
+      if (saved.phone) {
+        const { countryCode: cc, local } = splitPhone(saved.phone);
+        setCountryCode(cc);
+        setPhone(local);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Load tenant + services (5 s timeout)
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-
-    fetch(`/api/tenants/${params.slug}`, { signal: controller.signal })
+    const timer = setTimeout(() => controller.abort(), 5000);
+    fetch(`/api/tenants/${slug}`, { signal: controller.signal })
       .then(r => r.json())
       .then(d => {
         if (d.data) setTenant(d.data);
@@ -63,11 +87,10 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
         else setLoadErr("Erreur de connexion. Réessayez.");
       })
       .finally(() => clearTimeout(timer));
-
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [params.slug]);
+  }, [slug]);
 
-  // Stable primitive IDs — prevent object reference churn causing 422 loops
+  // Fetch available slots when service or date changes
   const tenantId = tenant?.id ?? null;
   const svcId    = svc?.id    ?? null;
 
@@ -78,19 +101,27 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
     setSlot(null);
     fetch(`/api/slots?tenantId=${tenantId}&serviceId=${svcId}&date=${dateStr}`, { signal: controller.signal })
       .then(r => r.json())
-      .then(d => { setSlots(d.data?.slots ?? []); })
+      .then(d => setSlots(d.data?.slots ?? []))
       .catch(err => { if (err.name !== "AbortError") setSlots([]); })
       .finally(() => setSlotsLoading(false));
     return () => controller.abort();
   }, [tenantId, svcId, dateStr]);
 
+  // Payment eligibility — hides deposit/payment UI for FREE or unconfigured tenants
+  const paymentEnabled = canUsePayment(tenant);
+
+  const deposit = svc && tenant ? Math.round(svc.priceCents * (tenant.depositPercent / 100)) : 0;
+  const grouped = {
+    morning:   slots.filter(s => new Date(s.startsAt).getUTCHours() < 12),
+    afternoon: slots.filter(s => { const h = new Date(s.startsAt).getUTCHours(); return h >= 12 && h < 17; }),
+    evening:   slots.filter(s => new Date(s.startsAt).getUTCHours() >= 17),
+  };
+
   async function confirmBooking() {
     if (!tenant || !svc || !slot) return;
     const token = localStorage.getItem("belo_token");
-    if (!token) {
-      window.location.href = `/login?redirect=/booking/${params.slug}`;
-      return;
-    }
+    if (!token) { window.location.href = `/login?redirect=/booking/${slug}`; return; }
+
     setBooking(true); setBookingErr("");
     try {
       const providerMap: Record<string, string> = { wave:"wave", orange:"orange_money", stripe:"stripe" };
@@ -102,7 +133,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
           slotId:          slot.id,
           tenantId:        tenant.id,
           clientNote:      note || undefined,
-          paymentProvider: providerMap[payMethod] ?? "wave",
+          paymentProvider: paymentEnabled ? (providerMap[payMethod] ?? "wave") : "wave",
           idempotencyKey:  crypto.randomUUID(),
         }),
       });
@@ -114,8 +145,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
     finally { setBooking(false); }
   }
 
-  const grouped = { morning: slots.filter(s => new Date(s.startsAt).getUTCHours() < 12), afternoon: slots.filter(s => { const h = new Date(s.startsAt).getUTCHours(); return h >= 12 && h < 17; }), evening: slots.filter(s => new Date(s.startsAt).getUTCHours() >= 17) };
-  const deposit = svc && tenant ? Math.round(svc.priceCents * (tenant.depositPercent / 100)) : 0;
+  // ── Error / loading states ────────────────────────────────────
 
   if (loadErr) return (
     <>
@@ -151,12 +181,11 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
 
           <Link href="/salons" style={{fontSize:12,color:"var(--text3)",textDecoration:"none",marginBottom:16,display:"block"}}>← Retour aux salons</Link>
 
-          {/* Salon header card */}
+          {/* Salon header */}
           <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden",marginBottom:24}}>
             <div style={{height:160,position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#0d2d1a,#1a3a2a)"}}>
               {tenant.coverUrl ? (
-                <img src={tenant.coverUrl} alt={tenant.name}
-                  style={{width:"100%",height:"100%",objectFit:"cover",opacity:.85}} />
+                <img src={tenant.coverUrl} alt={tenant.name} style={{width:"100%",height:"100%",objectFit:"cover",opacity:.85}} />
               ) : (
                 <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48}}>
                   {icon(tenant.services[0]?.category ?? "")}
@@ -188,7 +217,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
             })}
           </div>
 
-          {/* STEP 1 — Service */}
+          {/* ── STEP 1 — Service ── */}
           {step === 1 && (
             <div>
               <div style={{fontFamily:"var(--serif)",fontSize:15,fontWeight:700,marginBottom:14}}>Choisissez votre prestation</div>
@@ -215,7 +244,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
             </div>
           )}
 
-          {/* STEP 2 — Slot */}
+          {/* ── STEP 2 — Slot ── */}
           {step === 2 && (
             <div>
               <div style={{fontFamily:"var(--serif)",fontSize:15,fontWeight:700,marginBottom:14}}>Choisissez votre créneau</div>
@@ -227,15 +256,12 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
                   </div>
                 ))}
               </div>
-
               {slotsLoading && <div style={{textAlign:"center",padding:"20px 0",color:"var(--text3)",fontSize:13}}>Chargement des créneaux…</div>}
-
               {!slotsLoading && slots.length === 0 && (
                 <div style={{textAlign:"center",padding:"24px",background:"rgba(255,255,255,.03)",borderRadius:12,color:"var(--text3)",fontSize:13,marginBottom:16}}>
                   Aucun créneau disponible ce jour. Essayez une autre date.
                 </div>
               )}
-
               {!slotsLoading && [["Matin", grouped.morning], ["Après-midi", grouped.afternoon], ["Soir", grouped.evening]].map(([label, group]) => (
                 (group as Slot[]).length > 0 && (
                   <div key={label as string} style={{marginBottom:16}}>
@@ -252,7 +278,6 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
                   </div>
                 )
               ))}
-
               <div style={{display:"flex",gap:10,marginTop:24}}>
                 <button onClick={() => setStep(1)} style={{flex:1,padding:12,borderRadius:12,background:"transparent",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:13,fontWeight:600,cursor:"pointer"}}>← Retour</button>
                 <button onClick={() => setStep(3)} disabled={!slot} style={{flex:2,padding:12,borderRadius:12,background:slot?"var(--g)":"var(--border)",color:slot?"#fff":"var(--text3)",border:"none",fontFamily:"var(--serif)",fontSize:14,fontWeight:700,cursor:slot?"pointer":"not-allowed"}}>
@@ -262,10 +287,12 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
             </div>
           )}
 
-          {/* STEP 3 — Confirm */}
+          {/* ── STEP 3 — Confirm ── */}
           {step === 3 && svc && slot && (
             <div>
               <div style={{fontFamily:"var(--serif)",fontSize:15,fontWeight:700,marginBottom:14}}>Confirmer votre réservation</div>
+
+              {/* Booking summary */}
               <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,padding:20,marginBottom:20}}>
                 <div style={{display:"flex",gap:14,marginBottom:16}}>
                   <div style={{width:44,height:44,borderRadius:12,background:"rgba(34,211,138,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{icon(svc.category)}</div>
@@ -274,12 +301,12 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
                     <div style={{fontSize:12,color:"var(--text3)"}}>⏱ {fmt(svc.durationMin)} · 📅 {new Date(slot.startsAt).toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} · 🕐 {fmtTime(slot.startsAt)}</div>
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div style={{display:"grid",gridTemplateColumns:paymentEnabled?"1fr 1fr":"1fr",gap:12}}>
                   <div style={{background:"rgba(255,255,255,.03)",borderRadius:10,padding:12}}>
                     <div style={{fontSize:10,color:"var(--text3)",marginBottom:3}}>Montant total</div>
                     <div style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700}}>{fmtPrice(svc.priceCents)}</div>
                   </div>
-                  {tenant.depositEnabled && (
+                  {paymentEnabled && (
                     <div style={{background:"rgba(34,211,138,.06)",border:"1px solid rgba(34,211,138,.15)",borderRadius:10,padding:12}}>
                       <div style={{fontSize:10,color:"var(--text3)",marginBottom:3}}>Acompte ({tenant.depositPercent}%)</div>
                       <div style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,color:"var(--g2)"}}>{fmtPrice(deposit)}</div>
@@ -288,50 +315,70 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
                 </div>
               </div>
 
+              {/* WhatsApp — shared PhoneInput component */}
               <div style={{marginBottom:16}}>
                 <label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:6}}>Votre WhatsApp</label>
-                <div style={{display:"flex",border:"1px solid var(--border2)",borderRadius:12,overflow:"hidden"}}>
-                  <div style={{padding:"10px 12px",background:"rgba(255,255,255,.04)",borderRight:"1px solid var(--border2)",fontSize:12,color:"var(--text3)",whiteSpace:"nowrap"}}>🇸🇳 +221</div>
-                  <input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="77 123 45 67" style={{flex:1,border:"none",borderRadius:0,padding:"10px 12px",fontSize:14,background:"transparent"}} />
-                </div>
+                <PhoneInput
+                  countryCode={countryCode}
+                  localNumber={phone}
+                  onCountryChange={setCountryCode}
+                  onNumberChange={setPhone}
+                />
               </div>
 
+              {/* Optional note */}
               <div style={{marginBottom:20}}>
                 <label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:6}}>Note optionnelle</label>
                 <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Précisions pour le salon…" rows={2} style={{width:"100%",resize:"none",padding:"10px 12px",borderRadius:10,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}} />
               </div>
 
-              <div style={{marginBottom:24}}>
-                <label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:10}}>Mode de paiement</label>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-                  {[{id:"wave",label:"Wave",icon:"🌊"},{id:"orange",label:"Orange Money",icon:"📱"},{id:"stripe",label:"Carte",icon:"💳"}].map(p => (
-                    <div key={p.id} onClick={() => setPayMethod(p.id)} style={{background:payMethod===p.id?"rgba(34,211,138,.08)":"var(--card)",border:`1px solid ${payMethod===p.id?"rgba(34,211,138,.4)":"var(--border)"}`,borderRadius:12,padding:12,textAlign:"center",cursor:"pointer",transition:".2s"}}>
-                      <div style={{fontSize:22,marginBottom:4}}>{p.icon}</div>
-                      <div style={{fontSize:11,fontWeight:600,color:payMethod===p.id?"var(--g2)":"var(--text2)"}}>{p.label}</div>
-                    </div>
-                  ))}
+              {/* Payment methods — only PRO/PREMIUM with deposit configured */}
+              {paymentEnabled ? (
+                <div style={{marginBottom:24}}>
+                  <label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:10}}>Mode de paiement</label>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                    {[{id:"wave",label:"Wave",icon:"🌊"},{id:"orange",label:"Orange Money",icon:"📱"},{id:"stripe",label:"Carte",icon:"💳"}].map(p => (
+                      <div key={p.id} onClick={() => setPayMethod(p.id)} style={{background:payMethod===p.id?"rgba(34,211,138,.08)":"var(--card)",border:`1px solid ${payMethod===p.id?"rgba(34,211,138,.4)":"var(--border)"}`,borderRadius:12,padding:12,textAlign:"center",cursor:"pointer",transition:".2s"}}>
+                        <div style={{fontSize:22,marginBottom:4}}>{p.icon}</div>
+                        <div style={{fontSize:11,fontWeight:600,color:payMethod===p.id?"var(--g2)":"var(--text2)"}}>{p.label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div style={{marginBottom:24,padding:"12px 14px",background:"rgba(34,211,138,.05)",border:"1px solid rgba(34,211,138,.15)",borderRadius:10,fontSize:12,color:"var(--text2)"}}>
+                  ✓ Paiement directement en salon — aucun acompte requis.
+                </div>
+              )}
 
               {bookingErr && <div style={{color:"var(--red)",fontSize:12,marginBottom:12,padding:"10px 14px",background:"rgba(239,68,68,.06)",borderRadius:8}}>{bookingErr}</div>}
 
               <div style={{display:"flex",gap:10}}>
                 <button onClick={() => setStep(2)} style={{flex:1,padding:12,borderRadius:12,background:"transparent",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:13,fontWeight:600,cursor:"pointer"}}>← Retour</button>
-                <button onClick={confirmBooking} disabled={!phone || booking} style={{flex:2,padding:14,borderRadius:12,background:phone&&!booking?"var(--g)":"var(--border)",color:phone&&!booking?"#fff":"var(--text3)",border:"none",fontFamily:"var(--serif)",fontSize:14,fontWeight:700,cursor:phone&&!booking?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                  {booking ? <><span style={{width:16,height:16,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .6s linear infinite"}} /> Traitement…</> : `Payer ${tenant.depositEnabled ? fmtPrice(deposit) : fmtPrice(svc.priceCents)} →`}
+                <button
+                  onClick={confirmBooking}
+                  disabled={!phone || booking}
+                  style={{flex:2,padding:14,borderRadius:12,background:phone&&!booking?"var(--g)":"var(--border)",color:phone&&!booking?"#fff":"var(--text3)",border:"none",fontFamily:"var(--serif)",fontSize:14,fontWeight:700,cursor:phone&&!booking?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}
+                >
+                  {booking
+                    ? <><span style={{width:16,height:16,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .6s linear infinite"}} /> Traitement…</>
+                    : paymentEnabled
+                      ? `Payer ${fmtPrice(deposit)} →`
+                      : "Confirmer →"
+                  }
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 4 — Success */}
+          {/* ── STEP 4 — Success ── */}
           {step === 4 && done && svc && slot && (
             <div style={{textAlign:"center",padding:"40px 0"}}>
               <div style={{fontSize:56,marginBottom:16}}>✅</div>
               <div style={{fontFamily:"var(--serif)",fontSize:24,fontWeight:700,marginBottom:8}}>Réservation confirmée !</div>
               <p style={{color:"var(--text2)",fontSize:14,marginBottom:24,lineHeight:1.6}}>
                 Votre réservation pour <strong style={{color:"var(--text)"}}>{svc.name}</strong> est confirmée.<br />
-                Une confirmation WhatsApp a été envoyée au +221 {phone}.
+                Une confirmation WhatsApp a été envoyée au {buildFullPhone(countryCode, phone)}.
               </p>
               <div style={{background:"var(--card)",border:"1px solid rgba(34,211,138,.2)",borderRadius:16,padding:20,maxWidth:400,margin:"0 auto 28px",textAlign:"left"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:10,fontSize:13}}><span style={{color:"var(--text3)"}}>Service</span><span style={{fontWeight:600}}>{svc.name}</span></div>

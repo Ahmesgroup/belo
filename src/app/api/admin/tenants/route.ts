@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth, withRole } from "@/middleware";
+import { withAuth, withRole } from "@/lib/route-auth";
 import { zodErrorResponse } from "@/lib/zod-formatter";
 import { handleRouteError, AppErrors } from "@/shared/errors";
 
@@ -41,7 +41,7 @@ const AdminActionSchema = z.object({
 });
 
 const BulkActionSchema = z.object({
-  tenantIds: z.array(z.string().cuid()).min(1).max(50),
+  tenantIds: z.array(z.string().min(1)).min(1).max(50),
   action:    z.enum(["validate", "block", "suspend", "reactivate"]),
   reason:    z.string().max(500).optional(),
 });

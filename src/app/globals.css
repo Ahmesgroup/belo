@@ -5,58 +5,15 @@
 
 /* ============================================================
    DESIGN TOKENS
-   All theme values as CSS custom properties.
-   Dark theme is default; light theme uses [data-theme="light"].
+   Light theme is the default (:root).
+   Dark theme overrides via [data-theme="dark"].
+   ThemeInit.tsx applies the user's persisted preference after
+   hydration — suppressHydrationWarning on <html> handles the
+   single expected attribute mismatch.
    ============================================================ */
 
-:root,
-:root[data-theme="dark"] {
-  /* Backgrounds */
-  --bg:    #07080d;
-  --bg2:   #0b0f1a;
-  --card:  #0f1520;
-  --card2: #141e2d;
-
-  /* Borders */
-  --border:  rgba(255,255,255,.07);
-  --border2: rgba(255,255,255,.13);
-
-  /* Brand gradient */
-  --g:      linear-gradient(135deg,#0d9e6e,#22d38a);
-  --g1:     #0d9e6e;
-  --g2:     #22d38a;
-  --g3:     #16a374;
-  --g-glow: rgba(34,211,138,.12);
-
-  /* Accent colors */
-  --purple:  #8b5cf6;
-  --purple2: #7c3aed;
-  --amber:   #f59e0b;
-  --red:     #e24b4a;
-  --blue:    #378add;
-  --yellow:  #f59e0b;
-
-  /* Text */
-  --text:  #f0f4f8;
-  --text2: #a0b0c0;
-  --text3: #506070;
-
-  /* Typography */
-  --serif: 'Sora', sans-serif;
-  --sans:  'DM Sans', sans-serif;
-
-  /* Shape */
-  --r:  12px;
-  --r2: 16px;
-
-  /* Shadow */
-  --shadow: 0 4px 24px rgba(0,0,0,.45);
-
-  /* Nav */
-  --nav-bg: rgba(7,8,13,.96);
-}
-
-:root[data-theme="light"] {
+:root {
+  /* Light theme (default — matches new-user default in ThemeInit) */
   --bg:    #f7f5f1;
   --bg2:   #ffffff;
   --card:  #ffffff;
@@ -82,8 +39,47 @@
   --text2: #374151;
   --text3: #6b7280;
 
+  /* Typography */
+  --serif: 'Sora', sans-serif;
+  --sans:  'DM Sans', sans-serif;
+
+  /* Shape */
+  --r:  12px;
+  --r2: 16px;
+
   --shadow:  0 4px 24px rgba(0,0,0,.12);
   --nav-bg:  rgba(247,245,241,.97);
+}
+
+[data-theme="dark"] {
+  /* Dark theme */
+  --bg:    #07080d;
+  --bg2:   #0b0f1a;
+  --card:  #0f1520;
+  --card2: #141e2d;
+
+  --border:  rgba(255,255,255,.07);
+  --border2: rgba(255,255,255,.13);
+
+  --g:      linear-gradient(135deg,#0d9e6e,#22d38a);
+  --g1:     #0d9e6e;
+  --g2:     #22d38a;
+  --g3:     #16a374;
+  --g-glow: rgba(34,211,138,.12);
+
+  --purple:  #8b5cf6;
+  --purple2: #7c3aed;
+  --amber:   #f59e0b;
+  --red:     #e24b4a;
+  --blue:    #378add;
+  --yellow:  #f59e0b;
+
+  --text:  #f0f4f8;
+  --text2: #a0b0c0;
+  --text3: #506070;
+
+  --shadow: 0 4px 24px rgba(0,0,0,.45);
+  --nav-bg: rgba(7,8,13,.96);
 }
 
 /* ============================================================

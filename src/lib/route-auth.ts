@@ -1,65 +1,28 @@
+// ============================================================
+// lib/route-auth.ts
+// Utilities for API route handlers — identity resolution, role
+// enforcement, tenant scoping, JWT signing.
+//
+// These helpers do NOT run at the edge. They are imported by
+// Next.js API route handlers (Server Components / Route Handlers).
+// Edge-level interception lives in proxy.ts.
+// ============================================================
+
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify, SignJWT } from "jose";
 
-// ── NEXT.JS MIDDLEWARE ────────────────────────────────────────────
-// Runs at the edge before route handlers.
-// For /api/admin: validates JWT, checks admin role, injects headers.
-// Route handlers then use withAuth() which reads injected headers (fast path).
-
-export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  // Auth endpoints handle their own rate limiting and validation — pass through immediately
-  if (pathname.startsWith("/api/auth")) {
-    return NextResponse.next();
-  }
-
-  if (pathname.startsWith("/api/admin")) {
-    // Accept token from Authorization header OR httpOnly cookie
-    const token =
-      req.headers.get("authorization")?.replace("Bearer ", "").trim() ??
-      req.cookies.get("belo_token")?.value;
-
-    if (!token) {
-      return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
-    }
-
-    try {
-      const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "");
-      const { payload } = await jwtVerify(token, secret);
-      const p = payload as { sub: string; role: string; tenantId?: string };
-
-      // Enforce admin role at the edge — fail fast before hitting route handlers
-      if (p.role !== "ADMIN" && p.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
-      }
-
-      // Inject verified identity into headers so route handlers skip re-parsing JWT
-      const next = NextResponse.next();
-      next.headers.set("x-user-id",   p.sub);
-      next.headers.set("x-user-role", p.role);
-      if (p.tenantId) next.headers.set("x-tenant-id", p.tenantId);
-      return next;
-
-    } catch {
-      return NextResponse.json({ error: { code: "TOKEN_INVALID" } }, { status: 401 });
-    }
-  }
-
-  return NextResponse.next();
-}
-
-// ── HELPERS FOR ROUTE HANDLERS ────────────────────────────────────
+// ── withAuth ──────────────────────────────────────────────────
+// Resolves the authenticated caller from a request.
+// Fast path: uses headers injected by proxy.ts for /api/admin routes.
+// Slow path: parses JWT from Authorization header or httpOnly cookie.
 
 export async function withAuth(req: NextRequest) {
-  // Fast path: headers injected by middleware (admin routes only)
   const userId = req.headers.get("x-user-id");
   const role   = req.headers.get("x-user-role");
   if (userId && role) {
     return { ok: true as const, userId, role, tenantId: req.headers.get("x-tenant-id") };
   }
 
-  // Parse JWT from Authorization header or httpOnly cookie
   const token =
     req.headers.get("authorization")?.replace("Bearer ", "").trim() ??
     req.cookies.get("belo_token")?.value;
@@ -76,6 +39,8 @@ export async function withAuth(req: NextRequest) {
   }
 }
 
+// ── withRole ──────────────────────────────────────────────────
+
 export function withRole(
   auth: { ok: boolean; role?: string },
   roles: string[]
@@ -88,6 +53,8 @@ export function withRole(
   }
   return { ok: true };
 }
+
+// ── withTenant ────────────────────────────────────────────────
 
 export function withTenant(
   auth: { ok: boolean; role?: string; tenantId?: string | null },
@@ -102,6 +69,8 @@ export function withTenant(
   }
   return { ok: true };
 }
+
+// ── JWT signing ───────────────────────────────────────────────
 
 export async function signJWT(payload: { sub: string; role: string; tenantId?: string }): Promise<string> {
   const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "");
@@ -120,7 +89,3 @@ export async function signRefreshToken(userId: string): Promise<string> {
     .setExpirationTime(process.env.REFRESH_TOKEN_EXPIRES_IN ?? "30d")
     .sign(secret);
 }
-
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|images/).*)"],
-};

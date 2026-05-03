@@ -54,11 +54,11 @@ export default function LandingPage() {
             </div>
 
             <h1 style={{fontFamily:"var(--serif)",fontSize:"clamp(36px,5.5vw,68px)",fontWeight:800,lineHeight:1.08,letterSpacing:"-.03em",marginBottom:20}}>
-              {t("hero_title")}<br />en <span style={{color:"var(--g2)",fontStyle:"italic"}}>45 secondes</span>.<br /><span style={{color:"var(--text2)"}}>{t("hero_sub")}</span>
+              {t("hero_title")}<br /><span style={{color:"var(--g2)",fontStyle:"italic"}}>{t("hero_title2")}</span><br /><span style={{color:"var(--text2)"}}>{t("hero_sub")}</span>
             </h1>
 
             <p style={{fontSize:16,color:"var(--text2)",lineHeight:1.7,maxWidth:520,margin:"0 auto 32px"}}>
-              Trouvez les meilleurs salons de coiffure, de beauté et de bien-être. Payez par Wave ou Orange Money. Annulez sans frais.
+              {t("hero_desc")}
             </p>
 
             <div style={{background:"var(--card)",border:"1px solid var(--border2)",borderRadius:14,padding:5,display:"flex",flexWrap:"wrap",gap:0,maxWidth:600,width:"100%",margin:"0 auto 16px"}}>
@@ -108,8 +108,8 @@ export default function LandingPage() {
         {/* SALONS EN VEDETTE */}
         <section style={{padding:"48px 5vw",maxWidth:1200,margin:"0 auto"}} id="salons">
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
-            <h2 style={{fontFamily:"var(--serif)",fontSize:20,fontWeight:700}}>Salons en vedette</h2>
-            <Link href="/salons" style={{padding:"7px 14px",borderRadius:9,fontSize:12,fontWeight:600,border:"1px solid var(--border2)",color:"var(--text2)",textDecoration:"none"}}>Voir tout →</Link>
+            <h2 style={{fontFamily:"var(--serif)",fontSize:20,fontWeight:700}}>{t("featured_salons")}</h2>
+            <Link href="/salons" style={{padding:"7px 14px",borderRadius:9,fontSize:12,fontWeight:600,border:"1px solid var(--border2)",color:"var(--text2)",textDecoration:"none"}}>{t("see_all")}</Link>
           </div>
           {salons.length === 0 ? (
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
@@ -155,14 +155,14 @@ export default function LandingPage() {
         <section id="how" style={{padding:"60px 5vw",background:"rgba(11,15,22,.4)",borderTop:"1px solid var(--border)"}}>
           <div style={{maxWidth:1000,margin:"0 auto",textAlign:"center"}}>
             <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(34,211,138,.08)",border:"1px solid rgba(34,211,138,.18)",color:"var(--g2)",fontSize:11,fontWeight:600,padding:"4px 12px",borderRadius:99,marginBottom:16,letterSpacing:".06em"}}>Comment ça marche</div>
-            <h2 style={{fontFamily:"var(--serif)",fontSize:"clamp(24px,4vw,40px)",fontWeight:800,marginBottom:12,letterSpacing:"-.02em"}}>Réserver en <span style={{color:"var(--g2)"}}>4 étapes</span></h2>
-            <p style={{color:"var(--text2)",fontSize:15,marginBottom:40}}>Conçu pour que votre réservation soit faite avant même de finir votre thé.</p>
+            <h2 style={{fontFamily:"var(--serif)",fontSize:"clamp(24px,4vw,40px)",fontWeight:800,marginBottom:12,letterSpacing:"-.02em"}}>{t("how_title")}</h2>
+            <p style={{color:"var(--text2)",fontSize:15,marginBottom:40}}>{t("how_sub")}</p>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:20}}>
               {[
-                { n:"1", icon:"🔍", title:"Choisissez votre service", sub:"Ongles, massage, coiffure — parcourez les salons près de vous.", time:"⏱ 10 secondes" },
-                { n:"2", icon:"🕐", title:"Sélectionnez un créneau", sub:"Les créneaux s'affichent en temps réel. Choisissez votre heure.", time:"⏱ 10 secondes" },
-                { n:"3", icon:"💳", title:"Confirmez & payez", sub:"Wave, Orange Money ou carte. Paiement sécurisé en 1 clic.", time:"⏱ 15 secondes" },
-                { n:"4", icon:"✅", title:"C'est confirmé !", sub:"Vous recevez une confirmation WhatsApp. Le salon est notifié.", time:"⚡ Instantané" },
+                { n:"1", icon:"🔍", title:t("step1_title"), sub:t("step1_desc"), time:t("step1_time") },
+                { n:"2", icon:"🕐", title:t("step2_title"), sub:t("step2_desc"), time:t("step2_time") },
+                { n:"3", icon:"💳", title:t("step3_title"), sub:t("step3_desc"), time:t("step3_time") },
+                { n:"4", icon:"✅", title:t("step4_title"), sub:t("step4_desc"), time:t("step4_time") },
               ].map(s => (
                 <div key={s.n} style={{textAlign:"center",padding:"0 16px"}}>
                   <div style={{width:56,height:56,borderRadius:"50%",background:"var(--card)",border:"1px solid var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,margin:"0 auto 16px"}}>{s.icon}</div>
@@ -181,8 +181,8 @@ export default function LandingPage() {
             <h2 style={{fontFamily:"var(--serif)",fontSize:"clamp(24px,4vw,40px)",fontWeight:800,marginBottom:12,letterSpacing:"-.02em"}}>Votre prochain rendez-vous <span style={{color:"var(--g2)",fontStyle:"italic"}}>vous attend là</span></h2>
             <p style={{color:"var(--text2)",marginBottom:28}}>{salonTotal > 0 ? salonTotal : "…"} salons disponibles. Réservation en 45 secondes. Confirmation immédiate.</p>
             <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
-              <Link href="/salons" style={{padding:"13px 26px",borderRadius:12,background:"var(--g)",color:"#fff",fontFamily:"var(--serif)",fontSize:14,fontWeight:700,textDecoration:"none"}}>✦ Trouver un salon</Link>
-              <Link href="/plans" style={{padding:"13px 26px",borderRadius:12,background:"rgba(255,255,255,.06)",color:"var(--text)",border:"1px solid var(--border2)",fontFamily:"var(--sans)",fontSize:14,textDecoration:"none"}}>📲 Pour les salons</Link>
+              <Link href="/salons" style={{padding:"13px 26px",borderRadius:12,background:"var(--g)",color:"#fff",fontFamily:"var(--serif)",fontSize:14,fontWeight:700,textDecoration:"none"}}>{t("cta_find")}</Link>
+              <Link href="/plans" style={{padding:"13px 26px",borderRadius:12,background:"rgba(255,255,255,.06)",color:"var(--text)",border:"1px solid var(--border2)",fontFamily:"var(--sans)",fontSize:14,textDecoration:"none"}}>{t("cta_salons")}</Link>
             </div>
             <p style={{marginTop:20,fontSize:11,color:"var(--text3)"}}>Gratuit · Annulation sans frais · Paiement sécurisé</p>
           </div>

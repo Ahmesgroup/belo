@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { getUser, clearAuth } from "@/lib/auth-client";
 
 export function PublicNav() {
-  const { lang, setLang } = useLang();
+  const { lang, setLang, t } = useLang();
   const [user,     setUser]     = useState<{ name?: string; role?: string } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -48,9 +48,9 @@ export function PublicNav() {
   const destAccount  = role === "OWNER" || role === "STAFF" ? "/dashboard"
     : role === "SUPER_ADMIN" || role === "ADMIN" ? "/admin"
     : "/profil";
-  const accountLabel = role === "OWNER" || role === "STAFF" ? "Mon dashboard"
-    : role === "SUPER_ADMIN" || role === "ADMIN" ? "Admin"
-    : "Mon compte";
+  const accountLabel = role === "OWNER" || role === "STAFF" ? t("nav_dashboard")
+    : role === "SUPER_ADMIN" || role === "ADMIN" ? t("nav_admin")
+    : t("nav_account");
 
   return (
     <>
@@ -61,7 +61,11 @@ export function PublicNav() {
           </Link>
           {!isMobile && (
             <div style={{display:"flex",gap:4,flex:1,overflowX:"auto",scrollbarWidth:"none"}}>
-              {[["Découvrir","/salons"],["Comment ça marche","/#how"],["Pour les salons","/pour-les-salons"]].map(([label,href]) => (
+              {[
+                [t("nav_discover"),  "/salons"],
+                [t("nav_how"),       "/#how"],
+                [t("nav_salons"),    "/pour-les-salons"],
+              ].map(([label,href]) => (
                 <Link key={href} href={href} style={{padding:"6px 12px",borderRadius:8,fontSize:12,color:"var(--text3)",textDecoration:"none",transition:".2s",whiteSpace:"nowrap"}}>
                   {label}
                 </Link>
@@ -85,16 +89,16 @@ export function PublicNav() {
                   {!isMobile && accountLabel}
                 </Link>
                 <button onClick={logout} style={{padding:"7px 14px",borderRadius:9,fontSize:12,fontWeight:600,background:"transparent",border:"1px solid var(--border2)",color:"var(--text3)",cursor:"pointer"}}>
-                  Déconnexion
+                  {t("nav_logout")}
                 </button>
               </>
             ) : (
               <Link href="/login" style={{padding:"7px 16px",borderRadius:9,fontSize:12,fontWeight:600,background:"transparent",border:"1px solid var(--border2)",color:"var(--text2)",textDecoration:"none"}}>
-                Connexion
+                {t("nav_login")}
               </Link>
             )}
             <Link href="/salons" style={{padding:"7px 16px",borderRadius:9,fontSize:12,fontWeight:600,background:"var(--g)",color:"#fff",textDecoration:"none"}}>
-              Réserver →
+              {t("nav_book")}
             </Link>
           </div>
         </div>
@@ -107,20 +111,22 @@ export function DashboardNav({
   plan = "FREE",
   mobile = false,
   onClose,
+  notifCount = 0,
 }: {
   plan?: "FREE" | "PRO" | "PREMIUM";
   mobile?: boolean;
   onClose?: () => void;
+  notifCount?: number;
 }) {
   const pathname = usePathname();
 
   const links = [
-    { href: "/dashboard",          icon: "▦",  label: "Dashboard" },
-    { href: "/dashboard/bookings", icon: "📅", label: "Réservations" },
-    { href: "/dashboard/services", icon: "✂️", label: "Services" },
-    { href: "/dashboard/horaires", icon: "🕐", label: "Horaires" },
-    { href: "/dashboard/profil",   icon: "👤", label: "Mon profil" },
-    ...(plan === "PREMIUM" ? [{ href: "/dashboard/equipe", icon: "👥", label: "Équipe" }] : []),
+    { href: "/dashboard",          icon: "▦",  label: "Dashboard",      badge: 0 },
+    { href: "/dashboard/bookings", icon: "📅", label: "Réservations",   badge: notifCount },
+    { href: "/dashboard/services", icon: "✂️", label: "Services",       badge: 0 },
+    { href: "/dashboard/horaires", icon: "🕐", label: "Horaires",       badge: 0 },
+    { href: "/dashboard/profil",   icon: "👤", label: "Mon profil",     badge: 0 },
+    ...(plan === "PREMIUM" ? [{ href: "/dashboard/equipe", icon: "👥", label: "Équipe", badge: 0 }] : []),
   ];
 
   const planColors: Record<string, string> = {
@@ -161,7 +167,7 @@ export function DashboardNav({
       </div>
 
       <nav style={{padding:"10px 8px",flex:1}}>
-        {links.map(({ href, icon, label }) => {
+        {links.map(({ href, icon, label, badge }) => {
           const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           return (
             <Link key={href} href={href} onClick={onClose} style={{
@@ -173,9 +179,21 @@ export function DashboardNav({
               background: active ? "rgba(34,211,138,.1)" : "transparent",
               textDecoration:"none",marginBottom:2,transition:".15s",
               borderLeft: active ? "3px solid var(--g2)" : "3px solid transparent",
+              position: "relative",
             }}>
               <span style={{fontSize:mobile?18:13,width:17,textAlign:"center"}}>{icon}</span>
-              {label}
+              <span style={{flex:1}}>{label}</span>
+              {badge > 0 && (
+                <span style={{
+                  minWidth:16,height:16,borderRadius:99,
+                  background:"var(--red)",color:"#fff",
+                  fontSize:9,fontWeight:700,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  padding:"0 4px",
+                }}>
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
             </Link>
           );
         })}

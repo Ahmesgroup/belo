@@ -10,7 +10,7 @@
 // ============================================================
 
 import { prisma } from "@/infrastructure/db/prisma";
-import { signJWT, signRefreshToken } from "@/middleware";
+import { signJWT, signRefreshToken } from "@/lib/route-auth";
 import { AppError } from "@/shared/errors";
 import { env } from "@/config/env";
 

@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createBooking, getTenantBookings } from "@/services/booking.service";
-import { withAuth, withTenant } from "@/middleware";
+import { withAuth, withTenant } from "@/lib/route-auth";
 import { AppError } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/infrastructure/db/prisma";
@@ -132,7 +132,10 @@ export async function POST(req: NextRequest) {
 }
 
 // ── PATCH /api/bookings ───────────────────────────────────────
-// Salon owner accepts (CONFIRMED) or refuses (CANCELLED) a booking
+// Salon owner accepts (CONFIRMED) or refuses (CANCELLED) a booking.
+// Everything — ownership check, state validation, update — runs inside
+// a single transaction so concurrent requests can never produce
+// an inconsistent result.
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -162,51 +165,60 @@ export async function PATCH(req: NextRequest) {
 
     const { bookingId, status } = parsed.data;
 
-    const booking = await prisma.booking.findUnique({
-      where:  { id: bookingId },
-      select: { id: true, tenantId: true, status: true, slotId: true },
-    });
+    // All checks and writes are atomic — no race condition possible.
+    const updated = await prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.findUnique({
+        where:  { id: bookingId },
+        select: { id: true, tenantId: true, status: true, slotId: true },
+      });
 
-    if (!booking) {
-      return NextResponse.json(
-        { error: { code: "NOT_FOUND", message: "Réservation introuvable." } },
-        { status: 404 }
-      );
-    }
+      if (!booking) {
+        throw new AppError("NOT_FOUND", "Réservation introuvable.", 404);
+      }
 
-    // Only the tenant owner (or admin) can update booking status
-    if (auth.role !== "ADMIN" && auth.role !== "SUPER_ADMIN" && auth.tenantId !== booking.tenantId) {
-      return NextResponse.json(
-        { error: { code: "FORBIDDEN", message: "Accès refusé." } },
-        { status: 403 }
-      );
-    }
+      // Ownership: only the tenant's owner or a platform admin may act.
+      if (
+        auth.role !== "ADMIN" &&
+        auth.role !== "SUPER_ADMIN" &&
+        auth.tenantId !== booking.tenantId
+      ) {
+        throw new AppError("FORBIDDEN", "Accès refusé.", 403);
+      }
 
-    let updated;
+      // Idempotency: already in the requested state → return early.
+      if (booking.status === status) return booking;
 
-    if (status === "CANCELLED") {
-      // Free the slot and decrement counter when owner refuses
-      updated = await prisma.$transaction(async (tx) => {
-        const b = await tx.booking.update({
+      // Only PENDING bookings can be accepted or refused.
+      if (booking.status !== "PENDING") {
+        throw new AppError(
+          "INVALID_STATE",
+          `Impossible de modifier une réservation déjà ${booking.status.toLowerCase()}.`,
+          409
+        );
+      }
+
+      if (status === "CONFIRMED") {
+        return tx.booking.update({
           where: { id: bookingId },
-          data:  { status: BookingStatus.CANCELLED, cancelledAt: new Date() },
+          data:  { status: BookingStatus.CONFIRMED, confirmedAt: new Date() },
         });
-        await tx.slot.update({
-          where: { id: booking.slotId },
-          data:  { isAvailable: true },
-        });
-        await tx.tenant.update({
-          where: { id: booking.tenantId },
-          data:  { bookingsUsedMonth: { decrement: 1 } },
-        });
-        return b;
-      });
-    } else {
-      updated = await prisma.booking.update({
+      }
+
+      // CANCELLED: update booking, free the slot, correct the monthly counter.
+      const cancelled = await tx.booking.update({
         where: { id: bookingId },
-        data:  { status: BookingStatus.CONFIRMED, confirmedAt: new Date() },
+        data:  { status: BookingStatus.CANCELLED, cancelledAt: new Date() },
       });
-    }
+      await tx.slot.update({
+        where: { id: booking.slotId },
+        data:  { isAvailable: true },
+      });
+      await tx.tenant.update({
+        where: { id: booking.tenantId },
+        data:  { bookingsUsedMonth: { decrement: 1 } },
+      });
+      return cancelled;
+    });
 
     return NextResponse.json(
       { data: { booking: { id: updated.id, status: updated.status } } },

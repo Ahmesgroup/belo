@@ -13,7 +13,7 @@ async function main() {
   console.log("Seeding Belo...");
 
   await Promise.all([
-    upsertUser("+352661000001","Pape Diouf","pape@belo.sn", UserRole.SUPER_ADMIN),
+    upsertUser("+221661000001","Pape Diouf","pape@belo.sn", UserRole.SUPER_ADMIN),
     upsertUser("+221771000001","Aminata Sarr","aminata@belo.sn", UserRole.ADMIN),
     upsertUser("+221772000001","Mamadou Diop","mamadou@belo.sn", UserRole.ADMIN),
     upsertUser("+221773000001","Fatou Ba","fatou@belo.sn", UserRole.ADMIN),
@@ -114,7 +114,11 @@ async function main() {
     await prisma.user.update({ where:{ id: owner.id }, data:{ tenantId: tenant.id } });
     tenantMap[s.slug] = tenant.id;
 
-    // Delete old services first so re-seeding always produces proper CUIDs
+    // Delete dependents in FK order before re-creating services
+    await prisma.review.deleteMany({ where: { tenantId: tenant.id } });
+    await prisma.notificationLog.deleteMany({ where: { tenantId: tenant.id } });
+    await prisma.booking.deleteMany({ where: { tenantId: tenant.id } });
+    await prisma.slot.deleteMany({ where: { tenantId: tenant.id } });
     await prisma.service.deleteMany({ where: { tenantId: tenant.id } });
 
     // Create services — let Prisma auto-generate CUIDs
@@ -132,10 +136,7 @@ async function main() {
   for (const slug of Object.keys(tenantMap)) {
     const tenantId = tenantMap[slug];
     const svcs = await prisma.service.findMany({ where:{ tenantId }, select:{ id:true, durationMin:true } });
-    // Delete expired/old slots before regenerating
-    await prisma.slot.deleteMany({
-      where: { tenantId, startsAt: { gt: new Date() }, isAvailable: true },
-    });
+    // Slots were already cleared during service cleanup above; skip here
 
     const slots: { tenantId:string; serviceId:string; startsAt:Date; endsAt:Date; isAvailable:boolean }[] = [];
     const now = new Date();

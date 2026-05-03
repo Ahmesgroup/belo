@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth } from "@/middleware";
+import { withAuth } from "@/lib/route-auth";
 
 export async function POST(req: NextRequest) {
   const auth = await withAuth(req);

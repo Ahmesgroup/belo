@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth } from "@/middleware";
+import { withAuth } from "@/lib/route-auth";
 import { z } from "zod";
 
 export async function GET() {
@@ -34,9 +34,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: { code: "INVALID_DATA" } }, { status: 422 });
   }
   const { plan, ...prices } = parsed.data;
-  const updated = await prisma.planConfig.update({
-    where: { plan },
-    data:  { ...prices, updatedBy: auth.userId },
+  const updated = await prisma.planConfig.upsert({
+    where:  { plan },
+    update: { ...prices, updatedBy: auth.userId },
+    create: { plan, ...prices, updatedBy: auth.userId },
   });
   return NextResponse.json({ data: { plan: updated } });
 }

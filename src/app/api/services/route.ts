@@ -16,7 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth, withRole, withTenant } from "@/middleware";
+import { withAuth, withRole, withTenant } from "@/lib/route-auth";
 import { zodErrorResponse } from "@/lib/zod-formatter";
 import { AppError } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";

@@ -243,6 +243,19 @@ export async function createBooking(dto: CreateBookingDTO) {
     return newBooking;
   });
 
+  // Internal notification for the dashboard (non-blocking — does not affect booking creation)
+  prisma.notificationLog.create({
+    data: {
+      tenantId:       dto.tenantId,
+      type:           NotifType.BOOKING_CONFIRMED,
+      channel:        "internal",
+      status:         NotifStatus.PENDING,
+      recipient:      tenant.whatsapp ?? dto.tenantId,
+      idempotencyKey: `${booking.id}:owner:internal`,
+      payload:        { message: "Nouvelle réservation reçue", bookingId: booking.id },
+    },
+  }).catch(() => {});
+
   return booking;
 }
 

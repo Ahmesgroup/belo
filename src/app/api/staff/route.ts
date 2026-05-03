@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth } from "@/middleware";
+import { withAuth } from "@/lib/route-auth";
 import { z } from "zod";
 
 export async function GET(req: NextRequest) {
