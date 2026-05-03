@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { getUser, authHeaders, jsonAuthHeaders } from "@/lib/auth-client";
 
 type Service = { id: string; name: string; category: string; priceCents: number; durationMin: number; isActive: boolean; photos: string[] };
 
@@ -18,27 +19,26 @@ const CATEGORIES = [
 ];
 
 export default function ServicesPage() {
-  const [services,      setServices]      = useState<Service[]>([]);
-  const [plan,          setPlan]          = useState("FREE");
-  const [loading,       setLoading]       = useState(true);
-  const [refresh,       setRefresh]       = useState(0);
-  const [editId,        setEditId]        = useState<string | null>(null);
-  const [editForm,      setEditForm]      = useState({ name: "", priceCents: 0, durationMin: 60 });
-  const [saving,        setSaving]        = useState(false);
-  const [saveErr,       setSaveErr]       = useState("");
-  const [showCreate,    setShowCreate]    = useState(false);
-  const [createForm,    setCreateForm]    = useState({ name: "", priceCents: "", durationMin: "60", category: "hair" });
-  const [creating,      setCreating]      = useState(false);
-  const [createErr,     setCreateErr]     = useState("");
+  const [services,   setServices]   = useState<Service[]>([]);
+  const [plan,       setPlan]       = useState("FREE");
+  const [loading,    setLoading]    = useState(true);
+  const [refresh,    setRefresh]    = useState(0);
+  const [editId,     setEditId]     = useState<string | null>(null);
+  const [editForm,   setEditForm]   = useState({ name: "", priceCents: 0, durationMin: 60 });
+  const [saving,     setSaving]     = useState(false);
+  const [saveErr,    setSaveErr]    = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: "", priceCents: "", durationMin: "60", category: "hair" });
+  const [creating,   setCreating]   = useState(false);
+  const [createErr,  setCreateErr]  = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    if (!token || !user?.tenantId) { setLoading(false); return; }
+    const user = getUser();
+    if (!user?.tenantId) { setLoading(false); return; }
 
     Promise.all([
-      fetch(`/api/services?tenantId=${user.tenantId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-      fetch(`/api/tenants/${user.tenantId}`,           { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/services?tenantId=${user.tenantId}`, { headers: authHeaders() }).then(r => r.json()),
+      fetch(`/api/tenants/${user.tenantId}`,           { headers: authHeaders() }).then(r => r.json()),
     ]).then(([svcData, tenantData]) => {
       if (svcData.data?.services)   setServices(svcData.data.services);
       if (tenantData.data?.plan)    setPlan(tenantData.data.plan);
@@ -48,12 +48,11 @@ export default function ServicesPage() {
   async function createService() {
     if (!createForm.name.trim() || !createForm.priceCents) { setCreateErr("Nom et prix requis."); return; }
     setCreating(true); setCreateErr("");
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
+    const user = getUser();
     try {
       const res = await fetch("/api/services", {
-        method: "POST",
-        headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}`, "x-tenant-id": user?.tenantId ?? "" },
+        method:  "POST",
+        headers: { ...jsonAuthHeaders(), "x-tenant-id": user?.tenantId ?? "" },
         body: JSON.stringify({
           name:        createForm.name.trim(),
           priceCents:  Math.round(parseFloat(createForm.priceCents) || 0),
@@ -72,18 +71,16 @@ export default function ServicesPage() {
   }
 
   function startEdit(s: Service) {
-    setEditId(s.id);
-    setSaveErr("");
+    setEditId(s.id); setSaveErr("");
     setEditForm({ name: s.name, priceCents: s.priceCents, durationMin: s.durationMin });
   }
 
   async function saveEdit(id: string) {
     setSaving(true); setSaveErr("");
-    const token = localStorage.getItem("belo_token");
     try {
       const res  = await fetch(`/api/services/${id}`, {
         method:  "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: jsonAuthHeaders(),
         body:    JSON.stringify(editForm),
       });
       const data = await res.json();
@@ -107,7 +104,7 @@ export default function ServicesPage() {
             {services.length}/{maxServices === 999 ? "∞" : maxServices} service{services.length !== 1 ? "s" : ""}
           </span>
           {!atLimit && (
-            <button onClick={() => { setShowCreate(!showCreate); setCreateErr(""); }} style={{padding:"8px 16px",borderRadius:9,background:showCreate?"var(--border2)":"var(--g)",color:"#fff",fontSize:12,fontWeight:600,border:"none",cursor:"pointer"}}>
+            <button type="button" onClick={() => { setShowCreate(!showCreate); setCreateErr(""); }} style={{padding:"8px 16px",borderRadius:9,background:showCreate?"var(--border2)":"var(--g)",color:"#fff",fontSize:12,fontWeight:600,border:"none",cursor:"pointer"}}>
               {showCreate ? "✕ Annuler" : "+ Ajouter"}
             </button>
           )}
@@ -120,36 +117,23 @@ export default function ServicesPage() {
         <div key={s.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:16,marginBottom:10}}>
           {editId === s.id ? (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <input
-                value={editForm.name}
-                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Nom du service"
-                style={{padding:"9px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)"}}
-              />
+              <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="Nom du service" style={{padding:"9px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)"}} />
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div>
                   <label style={{display:"block",fontSize:10,color:"var(--text3)",marginBottom:4}}>Prix (FCFA)</label>
-                  <input
-                    type="number" value={editForm.priceCents}
-                    onChange={e => setEditForm(f => ({ ...f, priceCents: Number(e.target.value) }))}
-                    style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}}
-                  />
+                  <input type="number" value={editForm.priceCents} onChange={e => setEditForm(f => ({ ...f, priceCents: Number(e.target.value) }))} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}} />
                 </div>
                 <div>
                   <label style={{display:"block",fontSize:10,color:"var(--text3)",marginBottom:4}}>Durée (min)</label>
-                  <input
-                    type="number" value={editForm.durationMin}
-                    onChange={e => setEditForm(f => ({ ...f, durationMin: Number(e.target.value) }))}
-                    style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}}
-                  />
+                  <input type="number" value={editForm.durationMin} onChange={e => setEditForm(f => ({ ...f, durationMin: Number(e.target.value) }))} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"rgba(255,255,255,.04)",fontSize:13,color:"var(--text)",boxSizing:"border-box"}} />
                 </div>
               </div>
               {saveErr && <div style={{fontSize:11,color:"var(--red)"}}>{saveErr}</div>}
               <div style={{display:"flex",gap:8}}>
-                <button onClick={() => saveEdit(s.id)} disabled={saving} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:"var(--g)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                <button type="button" onClick={() => saveEdit(s.id)} disabled={saving} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:"var(--g)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
                   {saving ? "Sauvegarde…" : "✓ Enregistrer"}
                 </button>
-                <button onClick={() => setEditId(null)} style={{padding:"9px 14px",borderRadius:8,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:12,cursor:"pointer"}}>
+                <button type="button" onClick={() => setEditId(null)} style={{padding:"9px 14px",borderRadius:8,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:12,cursor:"pointer"}}>
                   Annuler
                 </button>
               </div>
@@ -164,7 +148,7 @@ export default function ServicesPage() {
                 <div style={{fontSize:11,color:"var(--text3)"}}>⏱ {fmt(s.durationMin)}</div>
               </div>
               <div style={{fontFamily:"var(--serif)",fontSize:16,fontWeight:700,color:"var(--g2)"}}>{s.priceCents.toLocaleString("fr")} F</div>
-              <button onClick={() => startEdit(s)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
+              <button type="button" onClick={() => startEdit(s)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border2)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
                 Éditer
               </button>
             </div>
@@ -172,7 +156,6 @@ export default function ServicesPage() {
         </div>
       ))}
 
-      {/* Inline create form */}
       {showCreate && !atLimit && (
         <div style={{background:"var(--card)",border:"1px solid rgba(34,211,138,.25)",borderRadius:12,padding:16,marginBottom:10}}>
           <div style={{fontSize:12,fontWeight:700,color:"var(--g2)",marginBottom:12}}>✦ Nouveau service</div>
@@ -195,7 +178,7 @@ export default function ServicesPage() {
               </div>
             </div>
             {createErr && <div style={{fontSize:11,color:"var(--red)"}}>{createErr}</div>}
-            <button onClick={createService} disabled={creating} style={{padding:"9px",borderRadius:8,border:"none",background:"var(--g)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            <button type="button" onClick={createService} disabled={creating} style={{padding:"9px",borderRadius:8,border:"none",background:"var(--g)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
               {creating ? "Création…" : "✓ Créer le service"}
             </button>
           </div>

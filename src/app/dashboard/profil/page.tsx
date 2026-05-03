@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { getUser, authHeaders, jsonAuthHeaders } from "@/lib/auth-client";
 
 const PLAN_LABELS: Record<string, { icon: string; label: string; desc: string }> = {
   FREE:    { icon:"🌱", label:"Plan Free",    desc:"20 réservations/mois · 3 services" },
@@ -22,10 +23,9 @@ export default function DashboardProfilPage() {
   const [error,   setError]   = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    if (!token || !user?.tenantId) { setLoading(false); return; }
-    fetch(`/api/tenants/${user.tenantId}`, { headers: { Authorization: `Bearer ${token}` } })
+    const user = getUser();
+    if (!user?.tenantId) { setLoading(false); return; }
+    fetch(`/api/tenants/${user.tenantId}`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => {
         if (d.data) {
@@ -45,13 +45,12 @@ export default function DashboardProfilPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true); setError("");
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    if (!token || !user?.tenantId) { setError("Non connecté."); setSaving(false); return; }
+    const user = getUser();
+    if (!user?.tenantId) { setError("Non connecté."); setSaving(false); return; }
     try {
       const res = await fetch(`/api/tenants/${user.tenantId}`, {
         method:  "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: jsonAuthHeaders(),
         body:    JSON.stringify({ name, phone, address, city, socials, coverUrl }),
       });
       if (!res.ok) { const d = await res.json(); setError(d.error?.message ?? "Erreur."); return; }
@@ -72,11 +71,13 @@ export default function DashboardProfilPage() {
         <div style={{padding:"24px",textAlign:"center",fontSize:13,color:"var(--text3)"}}>Chargement…</div>
       ) : (
         <form onSubmit={handleSave} style={{display:"flex",flexDirection:"column",gap:16}}>
-          {/* Photo de couverture */}
+          {/* Cover photo */}
           <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20}}>
             <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:12}}>Photo du salon</div>
-            <div style={{width:"100%",height:160,borderRadius:12,overflow:"hidden",background:"var(--card2)",border:"2px dashed var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10,position:"relative",cursor:"pointer"}}
-              onClick={()=>document.getElementById("cover-upload")?.click()}>
+            <div
+              style={{width:"100%",height:160,borderRadius:12,overflow:"hidden",background:"var(--card2)",border:"2px dashed var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10,position:"relative",cursor:"pointer"}}
+              onClick={()=>document.getElementById("cover-upload")?.click()}
+            >
               {coverUrl ? (
                 <img src={coverUrl} alt="Couverture" style={{width:"100%",height:"100%",objectFit:"cover"}} />
               ) : (
@@ -87,22 +88,22 @@ export default function DashboardProfilPage() {
               )}
               {uploading && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13}}>Envoi en cours…</div>}
             </div>
-            <input id="cover-upload" type="file" accept="image/*" title="Photo du salon" style={{display:"none"}}
+            <input
+              id="cover-upload" type="file" accept="image/*" title="Photo du salon" style={{display:"none"}}
               onChange={async(e)=>{
                 const file=e.target.files?.[0]; if(!file) return;
                 setUploading(true);
                 const fd=new FormData(); fd.append("file",file);
-                const token=localStorage.getItem("belo_token");
-                const res=await fetch("/api/upload",{method:"POST",headers:{Authorization:`Bearer ${token}`},body:fd});
+                const res=await fetch("/api/upload",{method:"POST",headers:authHeaders(),body:fd});
                 const data=await res.json(); setUploading(false);
                 if(data.data?.url) setCoverUrl(data.data.url);
-              }}/>
+              }}
+            />
             {coverUrl && <button type="button" onClick={()=>setCoverUrl("")} style={{fontSize:11,color:"var(--red)",background:"transparent",border:"none",cursor:"pointer"}}>× Supprimer la photo</button>}
           </div>
 
           <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20,display:"flex",flexDirection:"column",gap:14}}>
             <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em"}}>Informations du salon</div>
-
             {[
               { label:"Nom du salon",        value:name,    set:setName,    placeholder:"Ex: Studio Aminata Beauty", type:"text" },
               { label:"Téléphone WhatsApp",  value:phone,   set:setPhone,   placeholder:"+221 77 123 45 67",        type:"tel" },
@@ -120,7 +121,6 @@ export default function DashboardProfilPage() {
             ))}
           </div>
 
-          {/* Social links */}
           <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20}}>
             <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:14}}>Réseaux sociaux</div>
             {[

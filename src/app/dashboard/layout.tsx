@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DashboardNav } from "@/components/ui/Nav";
 import { fetchWithRetry } from "@/lib/fetch-with-retry";
 import { usePathname } from "next/navigation";
+import { getUser, authHeaders } from "@/lib/auth-client";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [plan,     setPlan]     = useState<"FREE" | "PRO" | "PREMIUM">("FREE");
@@ -20,10 +21,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   const fetchTenant = useCallback(() => {
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    if (!token || !user?.tenantId) return;
-    fetchWithRetry(`/api/tenants/${user.tenantId}`, { headers: { Authorization: `Bearer ${token}` } })
+    const user = getUser();
+    if (!user?.tenantId) return;
+    fetchWithRetry(`/api/tenants/${user.tenantId}`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => { if (d.data?.plan) setPlan(d.data.plan as "FREE" | "PRO" | "PREMIUM"); })
       .catch(() => {});
@@ -56,6 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               belo<span style={{color:"var(--g2)"}}>.</span>
             </span>
             <button
+              type="button"
               onClick={() => setMenuOpen(!menuOpen)}
               style={{background:"var(--card)",border:"1px solid var(--border2)",
                 borderRadius:8,padding:"6px 14px",color:"var(--text2)",

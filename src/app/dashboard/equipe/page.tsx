@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { getUser, authHeaders, jsonAuthHeaders } from "@/lib/auth-client";
 
 export default function EquipePage() {
   const [staff,    setStaff]    = useState<any[]>([]);
@@ -11,25 +12,19 @@ export default function EquipePage() {
   const [success,  setSuccess]  = useState("");
   const [plan,     setPlan]     = useState("");
 
-  const getAuth = () => ({
-    token: localStorage.getItem("belo_token") ?? "",
-    user:  (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? "{}"); } catch { return {}; } })(),
-  });
-
   async function fetchStaff() {
     setLoading(true);
-    const { token, user } = getAuth();
-    const res = await fetch(`/api/staff?tenantId=${user.tenantId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const user = getUser();
+    const res = await fetch(`/api/staff?tenantId=${user?.tenantId}`, { headers: authHeaders() });
     const data = await res.json();
     setStaff(data.data?.staff ?? []);
     setLoading(false);
   }
 
   useEffect(() => {
-    const { token, user } = getAuth();
-    fetch(`/api/tenants/${user.tenantId}`, { headers: { Authorization: `Bearer ${token}` } })
+    const user = getUser();
+    if (!user?.tenantId) { setLoading(false); return; }
+    fetch(`/api/tenants/${user.tenantId}`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setPlan(d.data?.plan ?? "FREE"))
       .catch(() => {});
@@ -39,10 +34,9 @@ export default function EquipePage() {
   async function addStaff() {
     if (!newName.trim() || !newPhone.trim()) return;
     setAdding(true); setError("");
-    const { token } = getAuth();
     const res = await fetch("/api/staff", {
       method:  "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: jsonAuthHeaders(),
       body:    JSON.stringify({ name: newName.trim(), phone: newPhone.trim() }),
     });
     const data = await res.json();
@@ -59,10 +53,7 @@ export default function EquipePage() {
 
   async function removeStaff(staffId: string, name: string) {
     if (!confirm(`Retirer ${name} de votre équipe ?`)) return;
-    const { token } = getAuth();
-    await fetch(`/api/staff?staffId=${staffId}`, {
-      method: "DELETE", headers: { Authorization: `Bearer ${token}` },
-    });
+    await fetch(`/api/staff?staffId=${staffId}`, { method: "DELETE", headers: authHeaders() });
     fetchStaff();
   }
 
@@ -94,7 +85,7 @@ export default function EquipePage() {
           </div>
           {error   && <div style={{color:"var(--red)",fontSize:12}}>{error}</div>}
           {success && <div style={{color:"var(--g2)",fontSize:12}}>✓ {success}</div>}
-          <button onClick={addStaff} disabled={adding||!newName||!newPhone}
+          <button type="button" onClick={addStaff} disabled={adding||!newName||!newPhone}
             style={{padding:12,borderRadius:10,background:(!newName||!newPhone||adding)?"var(--border2)":"var(--g2)",color:(!newName||!newPhone||adding)?"var(--text3)":"#000",fontWeight:700,fontSize:13,border:"none",cursor:"pointer"}}>
             {adding ? "Ajout en cours…" : "Ajouter à l'équipe"}
           </button>
@@ -116,7 +107,7 @@ export default function EquipePage() {
               <div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>
             </div>
             <span style={{fontSize:10,background:"rgba(34,211,138,.1)",color:"var(--g2)",padding:"3px 8px",borderRadius:99,fontWeight:600}}>STAFF</span>
-            <button onClick={()=>removeStaff(s.id,s.name)}
+            <button type="button" onClick={()=>removeStaff(s.id,s.name)}
               style={{background:"transparent",border:"1px solid rgba(239,68,68,.3)",borderRadius:8,padding:"6px 12px",color:"var(--red)",fontSize:11,cursor:"pointer"}}>
               Retirer
             </button>

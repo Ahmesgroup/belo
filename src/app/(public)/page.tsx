@@ -194,7 +194,7 @@ export default function LandingPage() {
             {[
               {label:"À propos",         href:"/"},
               {label:"Salons",           href:"/salons"},
-              {label:"Pour les gérants", href:"/plans"},
+              {label:"Pour les gérants", href:"/pour-les-salons"},
               {label:"Plans",            href:"/plans"},
               {label:"Confidentialité",  href:"/confidentialite"},
               {label:"Contact",          href:"mailto:contact@belo.sn"},

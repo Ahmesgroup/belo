@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { getUser, authHeaders, jsonAuthHeaders } from "@/lib/auth-client";
 
 const DAYS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
 
@@ -19,12 +20,10 @@ export default function HorairesPage() {
   const [saved,  setSaved]  = useState(false);
   const [error,  setError]  = useState("");
 
-  // Load existing horaires from tenant on mount
   useEffect(() => {
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    if (!token || !user?.tenantId) return;
-    fetch(`/api/tenants/${user.tenantId}`, { headers: { Authorization: `Bearer ${token}` } })
+    const user = getUser();
+    if (!user?.tenantId) return;
+    fetch(`/api/tenants/${user.tenantId}`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => {
         const h = (d.data as any)?.horaires;
@@ -43,13 +42,12 @@ export default function HorairesPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true); setError("");
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    if (!token || !user?.tenantId) { setError("Non connecté."); setSaving(false); return; }
+    const user = getUser();
+    if (!user?.tenantId) { setError("Non connecté."); setSaving(false); return; }
     try {
       const res = await fetch(`/api/tenants/${user.tenantId}`, {
         method:  "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: jsonAuthHeaders(),
         body:    JSON.stringify({ horaires: hours }),
       });
       if (!res.ok) { const d = await res.json(); setError(d.error?.message ?? "Erreur de sauvegarde."); return; }

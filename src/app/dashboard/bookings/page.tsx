@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { getUser, authHeaders } from "@/lib/auth-client";
 
 type Booking = {
   id: string; status: string; createdAt: string;
@@ -25,13 +26,10 @@ export default function BookingsPage() {
   const [error,    setError]    = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? ""); } catch { return null; } })();
-    if (!token || !user?.tenantId) { setLoading(false); setError("Non connecté."); return; }
+    const user = getUser();
+    if (!user?.tenantId) { setLoading(false); setError("Non connecté."); return; }
 
-    fetch(`/api/bookings?tenantId=${user.tenantId}&pageSize=50`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`/api/bookings?tenantId=${user.tenantId}&pageSize=50`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => {
         if (d.data?.bookings) setBookings(d.data.bookings);

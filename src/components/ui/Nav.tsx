@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useLang } from "@/hooks/useLang";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getUser, clearAuth } from "@/lib/auth-client";
 
 export function PublicNav() {
   const { lang, setLang } = useLang();
@@ -10,10 +11,8 @@ export function PublicNav() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("belo_user");
-      if (stored) setUser(JSON.parse(stored));
-    } catch {}
+    const u = getUser();
+    if (u) setUser(u);
   }, []);
 
   useEffect(() => {
@@ -24,8 +23,7 @@ export function PublicNav() {
   }, []);
 
   function logout() {
-    localStorage.removeItem("belo_user");
-    localStorage.removeItem("belo_token");
+    clearAuth();
     setUser(null);
     window.location.href = "/";
   }
@@ -63,7 +61,7 @@ export function PublicNav() {
           </Link>
           {!isMobile && (
             <div style={{display:"flex",gap:4,flex:1,overflowX:"auto",scrollbarWidth:"none"}}>
-              {[["Découvrir","/salons"],["Comment ça marche","/#how"],["Pour les salons","/plans"]].map(([label,href]) => (
+              {[["Découvrir","/salons"],["Comment ça marche","/#how"],["Pour les salons","/pour-les-salons"]].map(([label,href]) => (
                 <Link key={href} href={href} style={{padding:"6px 12px",borderRadius:8,fontSize:12,color:"var(--text3)",textDecoration:"none",transition:".2s",whiteSpace:"nowrap"}}>
                   {label}
                 </Link>

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getToken, getUser, authHeaders, jsonAuthHeaders, setStoredUser } from "@/lib/auth-client";
 
 
 const VIEWS = ["Mission Control","Tenants","Plans","Fraude","Équipe","Logs","Réglages"];
@@ -32,20 +33,20 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("belo_token");
-    const user  = (() => { try { return JSON.parse(localStorage.getItem("belo_user") ?? "{}"); } catch { return {}; } })();
+    const token = getToken();
+    const user  = getUser();
 
     if (!token) { router.replace("/login"); return; }
 
-    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") {
+    if (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") {
       setIsAdmin(true); setAuthChecked(true); return;
     }
 
-    fetch("/api/admin/tenants?pageSize=1", { headers: { Authorization: `Bearer ${token}` } })
+    fetch("/api/admin/tenants?pageSize=1", { headers: authHeaders() })
       .then(r => {
         if (r.ok) {
           setIsAdmin(true);
-          localStorage.setItem("belo_user", JSON.stringify({ ...user, role: "SUPER_ADMIN" }));
+          if (user) setStoredUser({ ...user, role: "SUPER_ADMIN" });
         } else {
           router.replace("/");
         }
@@ -56,12 +57,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (view !== 2) return;
-    const tok = localStorage.getItem("belo_token");
     fetch("/api/plans").then(r=>r.json()).then(d=>setPlanConfigs(d.data?.plans??[]));
     Promise.all([
-      fetch("/api/admin/tenants?plan=FREE&pageSize=1",    {headers:{Authorization:`Bearer ${tok}`}}).then(r=>r.json()),
-      fetch("/api/admin/tenants?plan=PRO&pageSize=1",     {headers:{Authorization:`Bearer ${tok}`}}).then(r=>r.json()),
-      fetch("/api/admin/tenants?plan=PREMIUM&pageSize=1", {headers:{Authorization:`Bearer ${tok}`}}).then(r=>r.json()),
+      fetch("/api/admin/tenants?plan=FREE&pageSize=1",    {headers:authHeaders()}).then(r=>r.json()),
+      fetch("/api/admin/tenants?plan=PRO&pageSize=1",     {headers:authHeaders()}).then(r=>r.json()),
+      fetch("/api/admin/tenants?plan=PREMIUM&pageSize=1", {headers:authHeaders()}).then(r=>r.json()),
     ]).then(([f,p,pr])=>setPlanStats({
       FREE:f.data?.pagination?.total??0, PRO:p.data?.pagination?.total??0, PREMIUM:pr.data?.pagination?.total??0,
     }));
@@ -69,11 +69,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    const token = localStorage.getItem("belo_token");
     setLoading(true);
-    fetch("/api/admin/tenants?pageSize=25", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch("/api/admin/tenants?pageSize=25", { headers: authHeaders() })
       .then(r => r.json())
       .then(d => {
         if (d.data?.tenants) setTenants(d.data.tenants);
@@ -350,8 +347,7 @@ export default function AdminPage() {
                           <button onClick={()=>setEditingPlan(null)} style={{fontSize:11,padding:"5px 12px",borderRadius:7,background:"transparent",border:"1px solid var(--border2)",color:"var(--text3)",cursor:"pointer"}}>Annuler</button>
                           <button onClick={async()=>{
                             setSavingPlan(true);
-                            const tok=localStorage.getItem("belo_token");
-                            const res=await fetch("/api/plans",{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${tok}`},body:JSON.stringify({plan:config.plan,...editValues})});
+                            const res=await fetch("/api/plans",{method:"PATCH",headers:jsonAuthHeaders(),body:JSON.stringify({plan:config.plan,...editValues})});
                             setSavingPlan(false);
                             if(res.ok){setPlanMsg("✓ Prix mis à jour");setEditingPlan(null);fetch("/api/plans").then(r=>r.json()).then(d=>setPlanConfigs(d.data?.plans??[]));setTimeout(()=>setPlanMsg(""),4000);}
                           }} disabled={savingPlan} style={{fontSize:11,padding:"5px 12px",borderRadius:7,background:"var(--g2)",border:"none",color:"#000",fontWeight:700,cursor:"pointer"}}>
