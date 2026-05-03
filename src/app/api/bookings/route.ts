@@ -14,6 +14,8 @@ import { withAuth, withTenant } from "@/middleware";
 import { AppError } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/infrastructure/db/prisma";
+import { BookingStatus } from "@prisma/client";
+import { getCorsHeaders } from "@/lib/cors";
 
 // ── VALIDATION SCHEMA ─────────────────────────────────────────
 
@@ -26,6 +28,11 @@ const CreateBookingSchema = z.object({
   paymentProvider: z.enum(["wave", "orange_money", "stripe", "paystack", "mtn_money"]).default("wave"),
   paymentRef:      z.string().max(200).optional(), // external payment reference (Wave/OM transaction ID)
   idempotencyKey:  z.string().uuid("idempotencyKey doit être un UUID v4"),
+});
+
+const PatchBookingSchema = z.object({
+  bookingId: z.string().min(1, "bookingId requis"),
+  status:    z.enum(["CONFIRMED", "CANCELLED"]),
 });
 
 const GetBookingsSchema = z.object({
@@ -116,7 +123,94 @@ export async function POST(req: NextRequest) {
           createdAt: booking.createdAt,
         },
       },
-      { status: 201 }
+      { status: 201, headers: getCorsHeaders(req) }
+    );
+
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+// ── PATCH /api/bookings ───────────────────────────────────────
+// Salon owner accepts (CONFIRMED) or refuses (CANCELLED) a booking
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const auth = await withAuth(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: { code: "UNAUTHORIZED", message: "Non authentifié." } },
+        { status: 401 }
+      );
+    }
+
+    const raw = await req.json().catch(() => null);
+    if (!raw) {
+      return NextResponse.json(
+        { error: { code: "INVALID_JSON", message: "Corps de la requête invalide." } },
+        { status: 400 }
+      );
+    }
+
+    const parsed = PatchBookingSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: { code: "VALIDATION_ERROR", message: "Données invalides.", fields: parsed.error.flatten().fieldErrors } },
+        { status: 422 }
+      );
+    }
+
+    const { bookingId, status } = parsed.data;
+
+    const booking = await prisma.booking.findUnique({
+      where:  { id: bookingId },
+      select: { id: true, tenantId: true, status: true, slotId: true },
+    });
+
+    if (!booking) {
+      return NextResponse.json(
+        { error: { code: "NOT_FOUND", message: "Réservation introuvable." } },
+        { status: 404 }
+      );
+    }
+
+    // Only the tenant owner (or admin) can update booking status
+    if (auth.role !== "ADMIN" && auth.role !== "SUPER_ADMIN" && auth.tenantId !== booking.tenantId) {
+      return NextResponse.json(
+        { error: { code: "FORBIDDEN", message: "Accès refusé." } },
+        { status: 403 }
+      );
+    }
+
+    let updated;
+
+    if (status === "CANCELLED") {
+      // Free the slot and decrement counter when owner refuses
+      updated = await prisma.$transaction(async (tx) => {
+        const b = await tx.booking.update({
+          where: { id: bookingId },
+          data:  { status: BookingStatus.CANCELLED, cancelledAt: new Date() },
+        });
+        await tx.slot.update({
+          where: { id: booking.slotId },
+          data:  { isAvailable: true },
+        });
+        await tx.tenant.update({
+          where: { id: booking.tenantId },
+          data:  { bookingsUsedMonth: { decrement: 1 } },
+        });
+        return b;
+      });
+    } else {
+      updated = await prisma.booking.update({
+        where: { id: bookingId },
+        data:  { status: BookingStatus.CONFIRMED, confirmedAt: new Date() },
+      });
+    }
+
+    return NextResponse.json(
+      { data: { booking: { id: updated.id, status: updated.status } } },
+      { headers: getCorsHeaders(req) }
     );
 
   } catch (err) {
@@ -156,7 +250,10 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "desc" },
         take: 50,
       });
-      return NextResponse.json({ data: { bookings, pagination: { total: bookings.length } } });
+      return NextResponse.json(
+        { data: { bookings, pagination: { total: bookings.length } } },
+        { headers: getCorsHeaders(req) }
+      );
     }
 
     // Tenant — header (middleware) ou query param (client direct)
@@ -188,11 +285,15 @@ export async function GET(req: NextRequest) {
       pageSize: parsed.data.pageSize,
     });
 
-    return NextResponse.json({ data: result });
+    return NextResponse.json({ data: result }, { headers: getCorsHeaders(req) });
 
   } catch (err) {
     return handleApiError(err);
   }
+}
+
+export function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(req) });
 }
 
 // ── ERROR HANDLER ─────────────────────────────────────────────

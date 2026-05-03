@@ -15,6 +15,7 @@ import { withAuth, withRole, withTenant } from "@/middleware";
 import { zodErrorResponse } from "@/lib/zod-formatter";
 import { handleRouteError, AppErrors } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
+import { getCorsHeaders } from "@/lib/cors";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
       },
     }, {
       headers: {
-        // Cache 2 min côté navigateur + CDN
+        ...getCorsHeaders(req),
         "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
       },
     });
@@ -363,4 +364,8 @@ async function PATCH_ONE(
   } catch (err) {
     return handleRouteError(err);
   }
+}
+
+export function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(req) });
 }

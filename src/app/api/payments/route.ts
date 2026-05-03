@@ -13,18 +13,19 @@ import { zodErrorResponse } from "@/lib/zod-formatter";
 import { handleRouteError, AppErrors } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { env } from "@/config/env";
+import { getCorsHeaders } from "@/lib/cors";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
 const InitPaymentSchema = z.object({
-  bookingId:   z.string().cuid("Réservation invalide"),
+  bookingId:   z.string().min(1, "Réservation invalide"),
   provider:    z.enum(["wave", "orange_money", "stripe"]),
   returnUrl:   z.string().url("URL de retour invalide"),
   cancelUrl:   z.string().url().optional(),
 });
 
 const RefundSchema = z.object({
-  bookingId: z.string().cuid(),
+  bookingId: z.string().min(1),
   reason:    z.string().max(500).optional(),
 });
 
@@ -166,7 +167,7 @@ async function handleInit(req: NextRequest): Promise<NextResponse> {
       currency: booking.currency,
       provider,
     },
-  });
+  }, { headers: getCorsHeaders(req) });
 }
 
 async function handleRefund(req: NextRequest): Promise<NextResponse> {
@@ -286,10 +287,14 @@ export async function GET(req: NextRequest) {
         paymentStatus: booking.paymentStatus,
         isPaid: booking.paymentStatus === "PAID",
       },
-    });
+    }, { headers: getCorsHeaders(req) });
   } catch (err) {
     return handleRouteError(err);
   }
+}
+
+export function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(req) });
 }
 
 // ── HELPERS PROVIDERS ─────────────────────────────────────────

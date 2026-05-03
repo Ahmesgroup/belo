@@ -21,6 +21,7 @@ import { zodErrorResponse } from "@/lib/zod-formatter";
 import { AppError } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { env } from "@/config/env";
+import { getCorsHeaders } from "@/lib/cors";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
@@ -146,6 +147,7 @@ export async function GET(req: NextRequest) {
       },
       {
         headers: {
+          ...getCorsHeaders(req),
           "Cache-Control": "public, s-maxage=120, stale-while-revalidate=60",
         },
       }
@@ -633,4 +635,8 @@ function handleError(err: unknown): NextResponse {
     { error: { code: "INTERNAL_ERROR", message: "Erreur serveur." } },
     { status: 500 }
   );
+}
+
+export function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(req) });
 }

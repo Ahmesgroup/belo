@@ -18,6 +18,7 @@ import { withAuth, withRole } from "@/middleware";
 import { zodErrorResponse } from "@/lib/zod-formatter";
 import { AppError } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
+import { getCorsHeaders } from "@/lib/cors";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
@@ -117,8 +118,7 @@ export async function GET(req: NextRequest) {
       {
         status: 200,
         headers: {
-          // Cache 60s côté navigateur — réduit les appels répétés
-          // Invalider manuellement côté client après une réservation
+          ...getCorsHeaders(req),
           "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
         },
       }
@@ -418,4 +418,8 @@ function handleError(err: unknown): NextResponse {
     { error: { code: "INTERNAL_ERROR", message: "Erreur serveur." } },
     { status: 500 }
   );
+}
+
+export function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(req) });
 }
