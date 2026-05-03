@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
     }, {
       headers: {
         // Cache 2 min côté navigateur + CDN
-        "Cache-Control": "public, s-maxage=120, stale-while-revalidate=60",
+        "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
       },
     });
   } catch (err) {

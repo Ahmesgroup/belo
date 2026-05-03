@@ -160,11 +160,21 @@ async function handleVerifyOtp(req: NextRequest): Promise<NextResponse> {
       },
     });
 
-    // Stocker le refresh token dans un cookie httpOnly
-    // (plus sécurisé que localStorage — non accessible par JS)
+    const isProd = process.env.NODE_ENV === "production";
+
+    // Access token — httpOnly cookie (not readable by JS, sent automatically on all requests)
+    response.cookies.set("belo_token", accessToken, {
+      httpOnly: true,
+      secure:   isProd,
+      sameSite: "lax",
+      maxAge:   7 * 24 * 60 * 60,  // 7 days
+      path:     "/",
+    });
+
+    // Refresh token — httpOnly cookie scoped to /api/auth only
     response.cookies.set("belo_refresh", refreshToken, {
       httpOnly: true,
-      secure:   process.env.NODE_ENV === "production",
+      secure:   isProd,
       sameSite: "lax",
       maxAge:   30 * 24 * 60 * 60, // 30 jours
       path:     "/api/auth",

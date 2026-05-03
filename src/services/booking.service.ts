@@ -172,7 +172,7 @@ export async function createBooking(dto: CreateBookingDTO) {
         priceCents: pricing.priceCents,
         depositCents: pricing.depositCents,
         currency: pricing.currency,
-        paymentProvider: (dto.paymentProvider as any) ?? null,
+        paymentProvider: mapPaymentProvider(dto.paymentProvider),
         paymentRef: dto.paymentRef ?? null,
         clientNote: dto.clientNote ?? null,
         idempotencyKey: dto.idempotencyKey,
@@ -341,6 +341,22 @@ export async function cancelBooking(dto: CancelBookingDTO) {
       },
     });
   });
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+
+const PAYMENT_PROVIDER_MAP: Record<string, string> = {
+  wave:         "WAVE",
+  orange_money: "ORANGE_MONEY",
+  stripe:       "STRIPE",
+  paystack:     "PAYSTACK",
+  mtn_money:    "MTN_MONEY",
+  cash:         "CASH",
+};
+
+function mapPaymentProvider(provider?: string) {
+  if (!provider) return null;
+  return (PAYMENT_PROVIDER_MAP[provider.toLowerCase()] ?? null) as import("@prisma/client").PaymentProvider | null;
 }
 
 // ── GET BOOKINGS PAR TENANT (dashboard gérant) ────────────────

@@ -3,82 +3,184 @@
 @tailwind components;
 @tailwind utilities;
 
-:root, :root[data-theme="dark"] {
-  --bg:     #07080d;
-  --bg2:    #0b0f1a;
-  --card:   #0f1520;
-  --card2:  #141e2d;
-  --border: rgba(255,255,255,.07);
-  --border2:rgba(255,255,255,.13);
+/* ============================================================
+   DESIGN TOKENS
+   All theme values as CSS custom properties.
+   Dark theme is default; light theme uses [data-theme="light"].
+   ============================================================ */
+
+:root,
+:root[data-theme="dark"] {
+  /* Backgrounds */
+  --bg:    #07080d;
+  --bg2:   #0b0f1a;
+  --card:  #0f1520;
+  --card2: #141e2d;
+
+  /* Borders */
+  --border:  rgba(255,255,255,.07);
+  --border2: rgba(255,255,255,.13);
+
+  /* Brand gradient */
   --g:      linear-gradient(135deg,#0d9e6e,#22d38a);
   --g1:     #0d9e6e;
   --g2:     #22d38a;
   --g3:     #16a374;
   --g-glow: rgba(34,211,138,.12);
-  --purple: #8b5cf6; --purple2:#7c3aed;
-  --amber:  #f59e0b; --red:#e24b4a; --blue:#378add; --yellow:#f59e0b;
-  --text:   #f0f4f8; --text2:#a0b0c0; --text3:#506070;
-  --serif:  'Sora',sans-serif; --sans:'DM Sans',sans-serif;
-  --r:12px; --r2:16px;
+
+  /* Accent colors */
+  --purple:  #8b5cf6;
+  --purple2: #7c3aed;
+  --amber:   #f59e0b;
+  --red:     #e24b4a;
+  --blue:    #378add;
+  --yellow:  #f59e0b;
+
+  /* Text */
+  --text:  #f0f4f8;
+  --text2: #a0b0c0;
+  --text3: #506070;
+
+  /* Typography */
+  --serif: 'Sora', sans-serif;
+  --sans:  'DM Sans', sans-serif;
+
+  /* Shape */
+  --r:  12px;
+  --r2: 16px;
+
+  /* Shadow */
   --shadow: 0 4px 24px rgba(0,0,0,.45);
+
+  /* Nav */
   --nav-bg: rgba(7,8,13,.96);
 }
+
 :root[data-theme="light"] {
-  --bg:     #f7f5f1;
-  --bg2:    #ffffff;
-  --card:   #ffffff;
-  --card2:  #f0ede8;
-  --border: rgba(0,0,0,.09);
-  --border2:rgba(0,0,0,.16);
+  --bg:    #f7f5f1;
+  --bg2:   #ffffff;
+  --card:  #ffffff;
+  --card2: #f0ede8;
+
+  --border:  rgba(0,0,0,.09);
+  --border2: rgba(0,0,0,.16);
+
   --g:      linear-gradient(135deg,#0d9e6e,#22d38a);
   --g1:     #0d9e6e;
   --g2:     #0d9e6e;
   --g3:     #0a8a5e;
   --g-glow: rgba(13,158,110,.10);
-  --purple: #7c3aed; --purple2:#6d28d9;
-  --amber:  #d97706; --red:#dc2626; --blue:#2563eb; --yellow:#d97706;
-  --text:   #111827; --text2:#374151; --text3:#6b7280;
-  --shadow: 0 4px 24px rgba(0,0,0,.12);
-  --nav-bg: rgba(247,245,241,.97);
+
+  --purple:  #7c3aed;
+  --purple2: #6d28d9;
+  --amber:   #d97706;
+  --red:     #dc2626;
+  --blue:    #2563eb;
+  --yellow:  #d97706;
+
+  --text:  #111827;
+  --text2: #374151;
+  --text3: #6b7280;
+
+  --shadow:  0 4px 24px rgba(0,0,0,.12);
+  --nav-bg:  rgba(247,245,241,.97);
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{
-  font-family:var(--sans);background:var(--bg);color:var(--text);
-  -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.6;
-  min-height:100vh;
-  transition:background .25s ease, color .2s ease;
+
+/* ============================================================
+   BASE — Reset, typography, scrollbar, selection
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
-/* Noise texture */
-body::before{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-  opacity:.35;
+
+html {
+  scroll-behavior: smooth;
 }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  transition: background .25s ease, color .2s ease;
+}
+
+/* Subtle noise texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: .35;
+}
+
 /* Scrollbar */
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:var(--bg2)}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:var(--border)}
+::-webkit-scrollbar               { width: 6px; height: 6px; }
+::-webkit-scrollbar-track         { background: var(--bg2); }
+::-webkit-scrollbar-thumb         { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover   { background: var(--border); }
+
 /* Selection */
-::selection{background:rgba(34,211,138,.2);color:var(--text)}
-/* Focus */
-*:focus-visible{outline:2px solid rgba(34,211,138,.5);outline-offset:2px;border-radius:4px}
-/* Form resets */
-input,select,textarea{
-  background:var(--card2);border:1px solid var(--border2);border-radius:var(--r);
-  padding:10px 14px;font-family:var(--sans);font-size:13px;color:var(--text);
-  outline:none;transition:border-color .2s,background .2s;width:100%;
+::selection { background: rgba(34,211,138,.2); color: var(--text); }
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid rgba(34,211,138,.5);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
-input:focus,select:focus,textarea:focus{border-color:rgba(34,211,138,.5);background:rgba(34,211,138,.02)}
-input::placeholder,textarea::placeholder{color:var(--text3)}
-select option{background:var(--card)}
-/* Animations */
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-@keyframes slideIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
-@keyframes spin{to{transform:rotate(360deg)}}
-.animate-fadeUp{animation:fadeUp .3s ease both}
-.animate-slideIn{animation:slideIn .3s ease both}
-.animate-pulse-dot{animation:pulse 2s infinite}
+
+/* ============================================================
+   COMPONENTS — Form defaults
+   ============================================================ */
+
+input,
+select,
+textarea {
+  background: var(--card2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 10px 14px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color .2s, background .2s;
+  width: 100%;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(34,211,138,.5);
+  background: rgba(34,211,138,.02);
+}
+
+input::placeholder,
+textarea::placeholder { color: var(--text3); }
+
+select option { background: var(--card); }
+
+/* ============================================================
+   UTILITIES — Animations
+   ============================================================ */
+
+@keyframes fadeUp   { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
+@keyframes slideIn  { from { opacity:0; transform:translateX(16px) } to { opacity:1; transform:translateX(0) } }
+@keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
+@keyframes pulse    { 0%,100% { opacity:1; transform:scale(1) } 50% { opacity:.4; transform:scale(.7) } }
+@keyframes spin     { to { transform:rotate(360deg) } }
+
+.animate-fadeUp    { animation: fadeUp  .3s ease both; }
+.animate-slideIn   { animation: slideIn .3s ease both; }
+.animate-pulse-dot { animation: pulse 2s infinite; }

@@ -17,14 +17,15 @@ import { prisma } from "@/infrastructure/db/prisma";
 
 // ── VALIDATION SCHEMA ─────────────────────────────────────────
 
+// IDs are CUIDs from Prisma but seeded/dev data may use other formats — use min(1) not cuid()
 const CreateBookingSchema = z.object({
-  serviceId:       z.string().cuid(),
-  slotId:          z.string().cuid(),
-  tenantId:        z.string().cuid().optional(), // fallback quand middleware pass-through
+  serviceId:       z.string().min(1, "serviceId requis"),
+  slotId:          z.string().min(1, "slotId requis"),
+  tenantId:        z.string().min(1).optional(),
   clientNote:      z.string().max(500).optional(),
-  paymentProvider: z.enum(["wave", "orange_money", "stripe", "paystack", "mtn_money"]).optional(),
-  paymentRef:      z.string().optional(),
-  idempotencyKey:  z.string().uuid(),
+  paymentProvider: z.enum(["wave", "orange_money", "stripe", "paystack", "mtn_money"]).default("wave"),
+  paymentRef:      z.string().max(200).optional(), // external payment reference (Wave/OM transaction ID)
+  idempotencyKey:  z.string().uuid("idempotencyKey doit être un UUID v4"),
 });
 
 const GetBookingsSchema = z.object({
@@ -67,12 +68,16 @@ export async function POST(req: NextRequest) {
 
     const parsed = CreateBookingSchema.safeParse(raw);
     if (!parsed.success) {
+      console.error("[API /bookings] Validation failed:", JSON.stringify({
+        body: raw,
+        errors: parsed.error.flatten().fieldErrors,
+      }));
       return NextResponse.json(
         {
           error: {
-            code: "VALIDATION_ERROR",
+            code:    "VALIDATION_ERROR",
             message: "Données invalides.",
-            fields: parsed.error.flatten().fieldErrors,
+            fields:  parsed.error.flatten().fieldErrors,
           },
         },
         { status: 422 }

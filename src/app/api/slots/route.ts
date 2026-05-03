@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
         headers: {
           // Cache 60s côté navigateur — réduit les appels répétés
           // Invalider manuellement côté client après une réservation
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30",
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
         },
       }
     );
