@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken, getUser, authHeaders, jsonAuthHeaders, setStoredUser } from "@/lib/auth-client";
+import { getToken, getUser, authHeaders, jsonAuthHeaders } from "@/lib/auth-client";
 
 
 const VIEWS = ["Mission Control","Tenants","Plans","Fraude","Équipe","Logs","Réglages"];
@@ -13,9 +13,8 @@ export default function AdminPage() {
   const [toasts,   setToasts]   = useState<{id:number;msg:string}[]>([]);
   const [tenants,  setTenants]  = useState<any[]>([]);
   const [stats,    setStats]    = useState<Record<string,number>>({});
-  const [loading,     setLoading]     = useState(true);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [isAdmin,     setIsAdmin]     = useState(false);
+  const [loading,  setLoading]  = useState(true);
+  const [adminOk,  setAdminOk]  = useState(false);
   const [isMobile,    setIsMobile]    = useState(false);
   const [menuOpen,     setMenuOpen]     = useState(false);
   const [planConfigs,  setPlanConfigs]  = useState<any[]>([]);
@@ -36,24 +35,12 @@ export default function AdminPage() {
     const token = getToken();
     const user  = getUser();
 
-    if (!token) { router.replace("/login"); return; }
+    if (!token || !user) { router.replace("/login"); return; }
+    if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") { router.replace("/"); return; }
 
-    if (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") {
-      setIsAdmin(true); setAuthChecked(true); return;
-    }
-
-    fetch("/api/admin/tenants?pageSize=1", { headers: authHeaders() })
-      .then(r => {
-        if (r.ok) {
-          setIsAdmin(true);
-          if (user) setStoredUser({ ...user, role: "SUPER_ADMIN" });
-        } else {
-          router.replace("/");
-        }
-        setAuthChecked(true);
-      })
-      .catch(() => { router.replace("/"); });
-  }, [router]);
+    setAdminOk(true);
+    fetchAdminData(token);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (view !== 2) return;
@@ -67,18 +54,22 @@ export default function AdminPage() {
     }));
   }, [view]);
 
-  useEffect(() => {
-    if (!isAdmin) return;
+  function fetchAdminData(token: string) {
     setLoading(true);
-    fetch("/api/admin/tenants?pageSize=25", { headers: authHeaders() })
-      .then(r => r.json())
-      .then(d => {
-        if (d.data?.tenants) setTenants(d.data.tenants);
-        if (d.data?.stats)   setStats(d.data.stats);
+    fetch("/api/admin/tenants?pageSize=50", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => {
+        if (!r.ok) throw new Error("Unauthorized");
+        return r.json();
       })
-      .catch(() => {})
+      .then(d => {
+        setTenants(d.data?.tenants || []);
+        setStats(d.data?.stats   || {});
+      })
+      .catch(() => { router.replace("/"); })
       .finally(() => setLoading(false));
-  }, [isAdmin]);
+  }
 
   function toast(msg: string) {
     const id = Date.now();
@@ -92,12 +83,11 @@ export default function AdminPage() {
     return <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:99,background:bg,color}}>{s.toUpperCase()}</span>;
   };
 
-  if (!authChecked) return (
-    <div style={{display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",background:"var(--bg)"}}>
-      <div style={{color:"var(--text3)",fontSize:13}}>Vérification…</div>
+  if (!adminOk) return (
+    <div style={{display:"flex",height:"100vh",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:"var(--text3)",fontSize:13}}>Loading...</div>
     </div>
   );
-  if (!isAdmin) return null;
 
   return (
     <div style={{display:"flex",flexDirection:isMobile?"column":"row",minHeight:"100vh",height:isMobile?"auto":"100vh",overflow:isMobile?"visible":"hidden"}}>
