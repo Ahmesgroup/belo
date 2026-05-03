@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         {/* Applies the persisted dark/light preference after hydration */}
         <ThemeInit />
         {/* Single source of truth for language state across the whole app */}
