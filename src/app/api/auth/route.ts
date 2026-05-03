@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sendOtp, verifyOtp, refreshAccessToken } from "@/services/auth.service";
 import { zodErrorResponse } from "@/lib/zod-formatter";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitByPhone } from "@/lib/rate-limit";
 import { AppError } from "@/shared/errors";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
@@ -69,25 +69,7 @@ export async function POST(req: NextRequest) {
 // ── SEND OTP ──────────────────────────────────────────────────
 
 async function handleSendOtp(req: NextRequest): Promise<NextResponse> {
-  // Set OTP_BYPASS=true in .env.local to disable rate limiting during local testing.
-  // Never enable in production — Vercel env vars are separate from .env.local.
-  const isDevMode = process.env.NODE_ENV === "development" || process.env.OTP_BYPASS === "true";
-
-  if (!isDevMode) {
-    const limited = await rateLimit(req, { max: 6, windowMs: 2 * 60 * 1000 });
-    if (limited) {
-      return NextResponse.json(
-        {
-          error: {
-            code:    "RATE_LIMITED",
-            message: "Too many attempts. Please wait 2 minutes before retrying.",
-          },
-        },
-        { status: 429 }
-      );
-    }
-  }
-
+  // Parse + validate body first so rate limit key (phone) is available
   const raw = await req.json().catch(() => null);
   if (!raw) {
     return NextResponse.json({ error: { code: "INVALID_JSON" } }, { status: 400 });
@@ -98,19 +80,28 @@ async function handleSendOtp(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json(zodErrorResponse(parsed.error), { status: 422 });
   }
 
+  // Phone-based rate limit — one user cannot block another (no shared-IP problem)
+  // Set OTP_BYPASS=true in .env.local to skip during local testing
+  const isDevMode = process.env.NODE_ENV === "development" || process.env.OTP_BYPASS === "true";
+  if (!isDevMode) {
+    const blocked = await rateLimitByPhone(parsed.data.phone, { max: 3, windowMs: 2 * 60 * 1000 });
+    if (blocked) {
+      return NextResponse.json(
+        { error: { code: "RATE_LIMITED", message: "Trop de tentatives. Réessayez dans 2 minutes." } },
+        { status: 429 }
+      );
+    }
+  }
+
   try {
     await sendOtp(parsed.data.phone);
-
     return NextResponse.json({
       data: {
         sent:      true,
-        expiresIn: 600, // secondes (10 minutes)
-        // Ne jamais retourner le numéro complet dans la réponse
-        // Masquer pour la confidentialité
+        expiresIn: 600,
         phoneMask: maskPhone(parsed.data.phone),
       },
     });
-
   } catch (err) {
     return handleAuthError(err);
   }
@@ -119,24 +110,7 @@ async function handleSendOtp(req: NextRequest): Promise<NextResponse> {
 // ── VERIFY OTP ────────────────────────────────────────────────
 
 async function handleVerifyOtp(req: NextRequest): Promise<NextResponse> {
-  const isDevMode = process.env.NODE_ENV === "development" || process.env.OTP_BYPASS === "true";
-
-  if (!isDevMode) {
-    // Anti-bruteforce: 6-digit OTP has 1M combinations — 5 attempts per 15 min prevents exhaustion
-    const limited = await rateLimit(req, { max: 5, windowMs: 15 * 60 * 1000 });
-    if (limited) {
-      return NextResponse.json(
-        {
-          error: {
-            code:    "RATE_LIMITED",
-            message: "Trop de tentatives. Attendez 15 minutes.",
-          },
-        },
-        { status: 429 }
-      );
-    }
-  }
-
+  // Parse + validate first so phone is available for rate limiting
   const raw = await req.json().catch(() => null);
   if (!raw) {
     return NextResponse.json({ error: { code: "INVALID_JSON" } }, { status: 400 });
@@ -145,6 +119,18 @@ async function handleVerifyOtp(req: NextRequest): Promise<NextResponse> {
   const parsed = VerifyOtpSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(zodErrorResponse(parsed.error), { status: 422 });
+  }
+
+  // Phone-based anti-bruteforce — 5 attempts per 15 min per number
+  const isDevMode = process.env.NODE_ENV === "development" || process.env.OTP_BYPASS === "true";
+  if (!isDevMode) {
+    const blocked = await rateLimitByPhone(parsed.data.phone, { max: 5, windowMs: 15 * 60 * 1000 });
+    if (blocked) {
+      return NextResponse.json(
+        { error: { code: "RATE_LIMITED", message: "Trop de tentatives de vérification. Réessayez dans 15 minutes." } },
+        { status: 429 }
+      );
+    }
   }
 
   try {

@@ -11,12 +11,13 @@ export async function GET(req: NextRequest) {
   if (isFirstDay) {
     await prisma.tenant.updateMany({ data: { bookingsUsedMonth: 0, bookingsResetAt: new Date() } });
   }
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
   const [otp, notif, audit, rateHits] = await Promise.all([
     prisma.auditLog.deleteMany({ where: { action:"otp.sent", createdAt:{ lt:thirtyDaysAgo } } }),
     prisma.notificationLog.deleteMany({ where: { status:"ARCHIVED", updatedAt:{ lt:sevenDaysAgo } } }),
     prisma.auditLog.deleteMany({ where: { createdAt:{ lt:thirtyDaysAgo }, action:{ notIn:["tenant.blocked","tenant.fraud","tenant.suspended","booking.refunded","admin.role_changed"] } } }),
-    prisma.auditLog.deleteMany({ where: { action:"rate.hit", createdAt:{ lt:oneDayAgo } } }),
+    // rate.hit entries older than 30 min are stale — all windows (2 min, 15 min) have already expired
+    prisma.auditLog.deleteMany({ where: { action:"rate.hit", createdAt:{ lt:thirtyMinAgo } } }),
   ]);
   return NextResponse.json({ ok:true, otpPurged:otp.count, notifPurged:notif.count, auditPurged:audit.count, rateHitsPurged:rateHits.count });
 }

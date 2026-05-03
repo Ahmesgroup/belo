@@ -24,28 +24,8 @@ export async function sendOtp(phone: string): Promise<{ sent: boolean }> {
   // Normaliser le numéro
   const normalizedPhone = normalizePhone(phone);
 
-  // OTP_BYPASS=true (or NODE_ENV=development) skips per-phone rate limiting for local testing
-  const isDevMode = process.env.NODE_ENV === "development" || process.env.OTP_BYPASS === "true";
-
-  if (!isDevMode) {
-    const WINDOW_MS    = 2 * 60 * 1000;
-    const MAX_ATTEMPTS = 5;
-    const recentOtps = await prisma.auditLog.count({
-      where: {
-        action:   "otp.sent",
-        entityId: normalizedPhone,
-        createdAt: { gt: new Date(Date.now() - WINDOW_MS) },
-      },
-    });
-
-    if (recentOtps >= MAX_ATTEMPTS) {
-      throw new AppError(
-        "OTP_RATE_LIMITED",
-        "Too many OTP requests. Please wait 2 minutes.",
-        429
-      );
-    }
-  }
+  // Rate limiting is now handled at the API route layer (rateLimitByPhone in auth/route.ts).
+  // No per-phone check here — single source of truth, no double blocking.
 
   // Générer OTP 6 chiffres
   const otp = Math.floor(100000 + Math.random() * 900000).toString();

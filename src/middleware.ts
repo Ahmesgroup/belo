@@ -9,6 +9,11 @@ import { jwtVerify, SignJWT } from "jose";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Auth endpoints handle their own rate limiting and validation — pass through immediately
+  if (pathname.startsWith("/api/auth")) {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/api/admin")) {
     // Accept token from Authorization header OR httpOnly cookie
     const token =
