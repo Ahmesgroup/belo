@@ -5,12 +5,17 @@
 // POST /api/admin/tenants?action=bulk  → actions en masse
 // ============================================================
 
+// Side-effect: register all event handlers before any emitEvent call
+import "@/lib/event-handlers";
+
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
 import { withAuth, withRole } from "@/lib/route-auth";
 import { zodErrorResponse } from "@/lib/zod-formatter";
 import { handleRouteError, AppErrors } from "@/shared/errors";
+import { emitEvent } from "@/lib/events";
+import { syncPlanToTenants, resetTenantQuota } from "@/services/plan.service";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
@@ -268,6 +273,24 @@ async function handleAction(req: NextRequest, tenantId: string | null) {
         },
       });
     });
+
+    // Emit events AFTER transaction commits — handlers create secondary effects
+    const adminId = auth.ok ? auth.userId : undefined;
+    if (action === "validate" || action === "reactivate") {
+      await emitEvent("tenant.activated",  { tenantId, tenantName: tenant.name, adminId });
+    } else if (action === "block") {
+      await emitEvent("tenant.blocked",    { tenantId, tenantName: tenant.name, adminId, reason });
+    } else if (action === "suspend") {
+      await emitEvent("tenant.suspended",  { tenantId, tenantName: tenant.name, adminId, reason });
+    } else if (action === "change_plan" && newPlan) {
+      await emitEvent("plan.updated", {
+        plan:    newPlan,
+        changes: { previousPlan: tenant.plan, newPlan },
+        adminId,
+      });
+      // Reset quota when plan changes (old limits no longer apply)
+      await resetTenantQuota(tenantId, adminId);
+    }
 
     return NextResponse.json({ data: { success: true, action, ...result } });
   } catch (err) {

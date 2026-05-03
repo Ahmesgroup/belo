@@ -14,6 +14,9 @@
 // Jamais de WhatsApp direct ici → toujours via outbox
 // ============================================================
 
+// Side-effect import: registers all event handlers before any emitEvent call
+import "@/lib/event-handlers";
+
 import { prisma } from "@/infrastructure/db/prisma";
 import { BookingStatus, PaymentStatus, NotifType, NotifStatus } from "@prisma/client";
 import {
@@ -24,6 +27,7 @@ import {
 } from "@/domain/booking/booking.rules";
 import { generateIdempotencyKey } from "@/infrastructure/queue/worker";
 import { AppError } from "@/shared/errors";
+import { emitEvent } from "@/lib/events";
 
 // ── INPUT TYPES ───────────────────────────────────────────────
 
@@ -243,7 +247,7 @@ export async function createBooking(dto: CreateBookingDTO) {
     return newBooking;
   });
 
-  // Internal notification for the dashboard (non-blocking — does not affect booking creation)
+  // Internal notification for the dashboard (non-blocking)
   prisma.notificationLog.create({
     data: {
       tenantId:       dto.tenantId,
@@ -254,6 +258,14 @@ export async function createBooking(dto: CreateBookingDTO) {
       idempotencyKey: `${booking.id}:owner:internal`,
       payload:        { message: "Nouvelle réservation reçue", bookingId: booking.id },
     },
+  }).catch(() => {});
+
+  // Emit event — triggers audit log and any future reactions (non-blocking)
+  emitEvent("booking.created", {
+    bookingId:  booking.id,
+    tenantId:   dto.tenantId,
+    userId:     dto.userId,
+    priceCents: booking.priceCents,
   }).catch(() => {});
 
   return booking;
@@ -342,7 +354,7 @@ export async function cancelBooking(dto: CancelBookingDTO) {
       },
     });
 
-    // Audit log
+    // Audit log (kept in transaction for consistency)
     await tx.auditLog.create({
       data: {
         tenantId: booking.tenantId,
@@ -354,6 +366,14 @@ export async function cancelBooking(dto: CancelBookingDTO) {
       },
     });
   });
+
+  // Emit event AFTER transaction commits — triggers fraud check (non-blocking)
+  emitEvent("booking.cancelled", {
+    bookingId:   dto.bookingId,
+    tenantId:    booking.tenantId,
+    cancelledBy: dto.cancelledBy,
+    reason:      dto.reason,
+  }).catch(() => {});
 }
 
 // ── HELPERS ───────────────────────────────────────────────────

@@ -1,11 +1,14 @@
 // GET   /api/admin/settings     → toutes les configurations système
 // PATCH /api/admin/settings     → batch update (body: { key: value })
 
+import "@/lib/event-handlers";
+
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
 import { withAuth, withRole } from "@/lib/route-auth";
 import { handleRouteError } from "@/shared/errors";
+import { onSettingsUpdated } from "@/services/plan.service";
 
 const ALLOWED_KEYS = [
   "maintenance_mode",
@@ -87,6 +90,9 @@ export async function PATCH(req: NextRequest) {
         newValue: parsed.data,
       },
     });
+
+    // Invalidate the in-process settings cache so the new values take effect immediately
+    onSettingsUpdated();
 
     return NextResponse.json({ data: { updated: Object.keys(parsed.data) } });
   } catch (err) {

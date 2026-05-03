@@ -16,6 +16,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/infrastructure/db/prisma";
 import { BookingStatus } from "@prisma/client";
 import { getCorsHeaders } from "@/lib/cors";
+import { requireNotMaintenance } from "@/lib/settings";
 
 // ── VALIDATION SCHEMA ─────────────────────────────────────────
 
@@ -46,6 +47,9 @@ const GetBookingsSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. Maintenance mode — block all new bookings when platform is under maintenance
+    await requireNotMaintenance();
+
     // 1. Rate limiting — 10 créations/min par IP
     const limited = await rateLimit(req, { max: 10, windowMs: 60_000 });
     if (limited) {

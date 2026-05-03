@@ -1,10 +1,14 @@
 // GET   /api/plans       → tarifs + limites + features
 // PATCH /api/plans       → mettre à jour prix, limites ou features
+//                          → déclenche syncPlanToTenants (event + audit)
+
+import "@/lib/event-handlers"; // register handlers
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/db/prisma";
 import { withAuth } from "@/lib/route-auth";
 import { z } from "zod";
+import { syncPlanToTenants } from "@/services/plan.service";
 
 export async function GET() {
   const configs = await prisma.planConfig.findMany({ orderBy: { plan: "asc" } });
@@ -56,7 +60,7 @@ export async function PATCH(req: NextRequest) {
 
   const { plan, limits, features, ...prices } = parsed.data;
 
-  // Merge limits/features with existing values
+  // Merge limits/features with existing values (partial update)
   const existing = await prisma.planConfig.findUnique({ where: { plan } });
   const mergedLimits = limits
     ? { ...(existing?.limits as object ?? {}), ...limits }
@@ -82,5 +86,14 @@ export async function PATCH(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({ data: { plan: updated } });
+  // Sync: emit plan.updated event + audit log
+  const changes: Record<string, unknown> = { ...prices };
+  if (mergedLimits)   changes.limits   = mergedLimits;
+  if (mergedFeatures) changes.features = mergedFeatures;
+
+  const syncResult = await syncPlanToTenants(plan, changes, auth.userId);
+
+  return NextResponse.json({
+    data: { plan: updated, sync: syncResult },
+  });
 }
