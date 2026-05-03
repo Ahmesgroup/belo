@@ -69,19 +69,23 @@ export async function POST(req: NextRequest) {
 // ── SEND OTP ──────────────────────────────────────────────────
 
 async function handleSendOtp(req: NextRequest): Promise<NextResponse> {
-  // Rate limit strict — éviter le spam WhatsApp
-  // 5 tentatives max par IP par heure (en plus du rate limit par numéro dans auth.service)
-  const limited = await rateLimit(req, { max: 6, windowMs: 2 * 60 * 1000 });
-  if (limited) {
-    return NextResponse.json(
-      {
-        error: {
-          code:    "RATE_LIMITED",
-          message: "Too many attempts. Please wait 2 minutes before retrying.",
+  // Set OTP_BYPASS=true in .env.local to disable rate limiting during local testing.
+  // Never enable in production — Vercel env vars are separate from .env.local.
+  const isDevMode = process.env.NODE_ENV === "development" || process.env.OTP_BYPASS === "true";
+
+  if (!isDevMode) {
+    const limited = await rateLimit(req, { max: 6, windowMs: 2 * 60 * 1000 });
+    if (limited) {
+      return NextResponse.json(
+        {
+          error: {
+            code:    "RATE_LIMITED",
+            message: "Too many attempts. Please wait 2 minutes before retrying.",
+          },
         },
-      },
-      { status: 429 }
-    );
+        { status: 429 }
+      );
+    }
   }
 
   const raw = await req.json().catch(() => null);
@@ -115,19 +119,22 @@ async function handleSendOtp(req: NextRequest): Promise<NextResponse> {
 // ── VERIFY OTP ────────────────────────────────────────────────
 
 async function handleVerifyOtp(req: NextRequest): Promise<NextResponse> {
-  // Rate limit plus strict sur la vérification
-  // Empêche le brute-force du code à 6 chiffres (1M combinaisons)
-  const limited = await rateLimit(req, { max: 5, windowMs: 15 * 60 * 1000 });
-  if (limited) {
-    return NextResponse.json(
-      {
-        error: {
-          code:    "RATE_LIMITED",
-          message: "Trop de tentatives. Attendez 15 minutes.",
+  const isDevMode = process.env.NODE_ENV === "development" || process.env.OTP_BYPASS === "true";
+
+  if (!isDevMode) {
+    // Anti-bruteforce: 6-digit OTP has 1M combinations — 5 attempts per 15 min prevents exhaustion
+    const limited = await rateLimit(req, { max: 5, windowMs: 15 * 60 * 1000 });
+    if (limited) {
+      return NextResponse.json(
+        {
+          error: {
+            code:    "RATE_LIMITED",
+            message: "Trop de tentatives. Attendez 15 minutes.",
+          },
         },
-      },
-      { status: 429 }
-    );
+        { status: 429 }
+      );
+    }
   }
 
   const raw = await req.json().catch(() => null);
