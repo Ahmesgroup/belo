@@ -466,6 +466,21 @@ model PlanConfig {
   priceFcfaAnnual Int      @default(0)
   priceEurAnnual  Int      @default(0)
   priceUsdAnnual  Int      @default(0)
+  // Limites du plan (JSON — facile à étendre sans migration)
+  limits          Json?    // { bookingsPerMonth, services, staff, photosPerService }
+  // Features booléennes
+  features        Json?    // { deposit, whatsapp, analytics, prioritySupport, customDomain }
   updatedAt       DateTime @updatedAt
   updatedBy       String?
+}
+
+// ============================================================
+// SYSTEM SETTING
+// Configuration globale de la plateforme (key-value)
+// ============================================================
+model SystemSetting {
+  key       String   @id     // ex: "maintenance_mode", "commission_percent"
+  value     Json             // toujours JSON pour flexibilité
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }

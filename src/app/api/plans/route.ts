@@ -1,3 +1,6 @@
+// GET   /api/plans       → tarifs + limites + features
+// PATCH /api/plans       → mettre à jour prix, limites ou features
+
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/db/prisma";
 import { withAuth } from "@/lib/route-auth";
@@ -11,6 +14,21 @@ export async function GET() {
   );
 }
 
+const LimitsSchema = z.object({
+  bookingsPerMonth:  z.number().int().min(0).nullable().optional(),
+  services:          z.number().int().min(0).nullable().optional(),
+  staff:             z.number().int().min(0).nullable().optional(),
+  photosPerService:  z.number().int().min(0).nullable().optional(),
+}).optional();
+
+const FeaturesSchema = z.object({
+  deposit:          z.boolean().optional(),
+  whatsapp:         z.boolean().optional(),
+  analytics:        z.boolean().optional(),
+  prioritySupport:  z.boolean().optional(),
+  customDomain:     z.boolean().optional(),
+}).optional();
+
 const PatchSchema = z.object({
   plan:            z.enum(["FREE", "PRO", "PREMIUM"]),
   priceFcfa:       z.number().min(0).optional(),
@@ -19,6 +37,8 @@ const PatchSchema = z.object({
   priceFcfaAnnual: z.number().min(0).optional(),
   priceEurAnnual:  z.number().min(0).optional(),
   priceUsdAnnual:  z.number().min(0).optional(),
+  limits:          LimitsSchema,
+  features:        FeaturesSchema,
 });
 
 export async function PATCH(req: NextRequest) {
@@ -31,13 +51,36 @@ export async function PATCH(req: NextRequest) {
 
   const parsed = PatchSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "INVALID_DATA" } }, { status: 422 });
+    return NextResponse.json({ error: { code: "INVALID_DATA", fields: parsed.error.flatten() } }, { status: 422 });
   }
-  const { plan, ...prices } = parsed.data;
+
+  const { plan, limits, features, ...prices } = parsed.data;
+
+  // Merge limits/features with existing values
+  const existing = await prisma.planConfig.findUnique({ where: { plan } });
+  const mergedLimits = limits
+    ? { ...(existing?.limits as object ?? {}), ...limits }
+    : undefined;
+  const mergedFeatures = features
+    ? { ...(existing?.features as object ?? {}), ...features }
+    : undefined;
+
   const updated = await prisma.planConfig.upsert({
     where:  { plan },
-    update: { ...prices, updatedBy: auth.userId },
-    create: { plan, ...prices, updatedBy: auth.userId },
+    update: {
+      ...prices,
+      ...(mergedLimits   !== undefined ? { limits:   mergedLimits   } : {}),
+      ...(mergedFeatures !== undefined ? { features: mergedFeatures } : {}),
+      updatedBy: auth.userId,
+    },
+    create: {
+      plan,
+      ...prices,
+      ...(mergedLimits   !== undefined ? { limits:   mergedLimits   } : {}),
+      ...(mergedFeatures !== undefined ? { features: mergedFeatures } : {}),
+      updatedBy: auth.userId,
+    },
   });
+
   return NextResponse.json({ data: { plan: updated } });
 }
