@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import ThemeInit from "@/components/ThemeInit";
+import CookieBanner from "@/components/CookieBanner";
 import { LangProvider } from "@/lib/lang-context";
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Single source of truth for language state across the whole app */}
         <LangProvider>
           {children}
+          <CookieBanner />
         </LangProvider>
       </body>
     </html>

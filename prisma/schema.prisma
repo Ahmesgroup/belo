@@ -150,13 +150,14 @@ model Tenant {
   deletedAt   DateTime?    // soft delete
 
   // Relations
-  users       User[]
-  services    Service[]
-  slots       Slot[]
-  bookings    Booking[]
-  notifLogs   NotificationLog[]
-  fraudAlerts FraudAlert[]
-  auditLogs   AuditLog[]
+  users        User[]
+  services     Service[]
+  slots        Slot[]
+  bookings     Booking[]
+  notifLogs    NotificationLog[]
+  fraudAlerts  FraudAlert[]
+  auditLogs    AuditLog[]
+  payoutInfos  TenantPayout[]
 
   // INDEXES (ciblés — coût minimal)
   @@index([status])           // filtrer actifs/bloqués
@@ -455,6 +456,70 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([action])
   @@index([action, entityId, createdAt])
+}
+
+// ============================================================
+// COUNTRY + CITY — geo dataset
+// ============================================================
+
+model Country {
+  code      String  @id           // ISO 3166-1 alpha-2: "SN", "FR", …
+  name      Json                  // { fr: "Sénégal", en: "Senegal" }
+  phoneCode String                // "+221"
+  currency  String                // "XOF" | "EUR" | "MAD"
+  isActive  Boolean @default(true)
+
+  cities    City[]
+
+  @@index([isActive])
+}
+
+model City {
+  id          String  @id @default(cuid())
+  name        Json                  // { fr: "Dakar", en: "Dakar" }
+  slug        String  @unique       // "dakar", "paris", "casablanca"
+  countryCode String
+  country     Country @relation(fields: [countryCode], references: [code])
+  isActive    Boolean @default(true)
+
+  @@index([countryCode])
+  @@index([slug])
+}
+
+// ============================================================
+// PAYMENT ACCOUNTS — plateforme (Belo encaisse)
+// ============================================================
+
+model PaymentAccount {
+  id         String   @id @default(cuid())
+  provider   String                // "stripe" | "wave" | "orange_money"
+  accountId  String                // Stripe account ID, Wave number, etc.
+  label      String?               // human label e.g. "Wave Sénégal principal"
+  isPlatform Boolean  @default(true)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([provider, isActive])
+}
+
+// ============================================================
+// TENANT PAYOUT — infos paiement des gérants (Phase 2+)
+// L'argent reste chez Belo en Phase 1.
+// ============================================================
+
+model TenantPayout {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  provider      String                // "wave" | "orange_money" | "stripe" | "bank"
+  accountNumber String                // numéro de téléphone ou IBAN
+  accountName   String?
+  isVerified    Boolean  @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
 }
 
 model PlanConfig {
