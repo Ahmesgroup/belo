@@ -180,3 +180,7 @@ select option { background: var(--card); }
 .animate-fadeUp    { animation: fadeUp  .3s ease both; }
 .animate-slideIn   { animation: slideIn .3s ease both; }
 .animate-pulse-dot { animation: pulse 2s infinite; }
+
+/* Hide scrollbar cross-browser */
+.no-scrollbar               { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

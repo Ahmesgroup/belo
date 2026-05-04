@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, use } from "react";
 import { PublicNav } from "@/components/ui/Nav";
-import { PhoneInput, buildFullPhone, splitPhone } from "@/components/ui/PhoneInput";
+import { PhoneInput, buildFullPhone, splitPhone, COUNTRIES } from "@/components/ui/PhoneInput";
 import { canUsePayment } from "@/lib/payment";
 import Link from "next/link";
 
@@ -319,9 +319,9 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
               <div style={{marginBottom:16}}>
                 <label style={{display:"block",fontSize:11,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:6}}>Votre WhatsApp</label>
                 <PhoneInput
-                  countryCode={countryCode}
+                  countryISO={COUNTRIES.find(c => c.dial === countryCode)?.iso ?? "SN"}
                   localNumber={phone}
-                  onCountryChange={setCountryCode}
+                  onCountryChange={c => setCountryCode(c.dial)}
                   onNumberChange={setPhone}
                 />
               </div>

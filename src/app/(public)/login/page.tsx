@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLang } from "@/hooks/useLang";
 import { PublicNav } from "@/components/ui/Nav";
-import { PhoneInput, buildFullPhone } from "@/components/ui/PhoneInput";
+import { PhoneInput, buildFullPhone, COUNTRIES } from "@/components/ui/PhoneInput";
 import Link from "next/link";
 
 export default function LoginPage() {
@@ -88,12 +88,11 @@ export default function LoginPage() {
               <>
                 <div style={{marginBottom:16}}>
                   <PhoneInput
-                    countryCode={countryCode}
+                    countryISO={COUNTRIES.find(c => c.dial === countryCode)?.iso ?? "SN"}
                     localNumber={phone}
-                    onCountryChange={setCountryCode}
+                    onCountryChange={c => setCountryCode(c.dial)}
                     onNumberChange={setPhone}
                     onEnter={sendOtp}
-                    fontSize={15}
                     autoFocus
                   />
                 </div>
