@@ -13,15 +13,19 @@
 4. [Arborescence du projet](#4-arborescence-du-projet)
 5. [Modèle de données](#5-modèle-de-données)
 6. [Authentification & Sécurité](#6-authentification--sécurité)
-7. [Flux de navigation](#7-flux-de-navigation)
-8. [API Routes — référence](#8-api-routes--référence)
-9. [Contrôle d'accès par rôle (RBAC)](#9-contrôle-daccès-par-rôle-rbac)
-10. [i18n — Internationalisation](#10-i18n--internationalisation)
-11. [PWA — Bouton d'installation](#11-pwa--bouton-dinstallation)
-12. [Variables d'environnement](#12-variables-denvironnement)
-13. [Installation & Développement](#13-installation--développement)
-14. [Déploiement Vercel](#14-déploiement-vercel)
-15. [Maintenance DB](#15-maintenance-db)
+7. [Système d'événements](#7-système-dévénements)
+8. [Fraud Engine](#8-fraud-engine)
+9. [Admin Control Panel](#9-admin-control-panel)
+10. [Flux de navigation](#10-flux-de-navigation)
+11. [API Routes — référence complète](#11-api-routes--référence-complète)
+12. [Contrôle d'accès par rôle (RBAC)](#12-contrôle-daccès-par-rôle-rbac)
+13. [i18n — Internationalisation](#13-i18n--internationalisation)
+14. [PWA — Bouton d'installation](#14-pwa--bouton-dinstallation)
+15. [Variables d'environnement](#15-variables-denvironnement)
+16. [Installation & Développement](#16-installation--développement)
+17. [Déploiement Vercel](#17-déploiement-vercel)
+18. [Maintenance DB](#18-maintenance-db)
+19. [Annexe — Décisions d'architecture](#19-annexe--décisions-darchitecture)
 
 ---
 
@@ -37,6 +41,7 @@
 | Notifications | WhatsApp (pattern outbox) |
 | Langues | Français · Anglais |
 | Plans | FREE · PRO · PREMIUM |
+| Admin | Control Panel 7 vues · Fraud Engine · Event System |
 
 ---
 
@@ -56,6 +61,7 @@
 | Stockage médias | Cloudflare R2 (compatible S3) | — |
 
 > **Pas de NextAuth.** L'authentification est gérée en interne via OTP WhatsApp + JWT signé (HS256).
+> **Pas de Redis.** La file d'événements et les notifications WhatsApp reposent sur PostgreSQL (outbox pattern).
 
 ---
 
@@ -69,57 +75,89 @@ graph TB
     end
 
     subgraph Edge["Edge – Vercel / proxy.ts"]
-        PX[proxy.ts<br/>JWT verify · RBAC]
+        PX[proxy.ts<br/>JWT verify · RBAC<br/>/admin /dashboard /profil]
     end
 
     subgraph API["API Routes – Vercel Functions"]
-        AUTH[/api/auth<br/>OTP · JWT]
+        AUTH[/api/auth]
         BOOK[/api/bookings]
         TEN[/api/tenants]
-        ADMIN[/api/admin/tenants]
+        ADMIN[/api/admin/*]
         PAY[/api/payments]
-        SLOT[/api/slots]
         CRON[/api/cron/*]
+    end
+
+    subgraph EventSystem["Event System"]
+        EB[events.ts<br/>emitEvent / onEvent]
+        EL[(EventLog<br/>persistence + retry)]
+        EH[event-handlers.ts<br/>audit · fraud · notif]
     end
 
     subgraph Services["Business Logic"]
         AS[auth.service.ts]
         BS[booking.service.ts]
+        FS[fraud.service.ts]
+        PS[plan.service.ts]
     end
 
     subgraph DB["Neon PostgreSQL"]
-        PRI[(Prisma ORM)]
+        PRI[(Prisma ORM<br/>12 modèles)]
     end
 
     subgraph External["Externes"]
-        WA[WhatsApp API<br/>Meta Cloud]
+        WA[WhatsApp API]
         WV[Wave API]
-        OM[Orange Money API]
+        OM[Orange Money]
         ST[Stripe API]
         R2[Cloudflare R2]
     end
 
-    UI -->|JWT cookie / Bearer| Edge
+    UI -->|httpOnly cookie + Bearer| Edge
     Edge -->|passe ou redirige| API
     API --> Services
+    API --> EB
+    EB --> EL
+    EB --> EH
+    EH --> FS
+    EH --> PRI
     Services --> PRI
-    Services -->|outbox pattern| WA
-    PAY --> WV
-    PAY --> OM
-    PAY --> ST
+    Services --> EB
+    PAY --> WV & OM & ST
     AUTH --> AS
     BOOK --> BS
+```
+
+### Flux d'un événement
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant emitEvent
+    participant EventLog
+    participant Handlers
+    participant AuditLog
+    participant FraudEngine
+    participant AdminNotif
+
+    Caller->>emitEvent: emitEvent("tenant.blocked", payload)
+    emitEvent-->>EventLog: INSERT status=pending (non-bloquant)
+    emitEvent->>Handlers: dispatch synchrone
+    Handlers->>AuditLog: createAuditLog()
+    Handlers->>FraudEngine: runFraudCheck() si booking.cancelled
+    Handlers->>AdminNotif: INSERT si tenant.created ou fraud≥60
+    Note over EventLog: Cron /api/cron/events retente<br/>les entrées pending toutes les 2 min
 ```
 
 ### Couches de l'application
 
 ```mermaid
 graph LR
-    A[Pages / Composants React] --> B[API Route Handlers]
-    B --> C[Services<br/>auth · booking]
+    A[Pages React] --> B[API Routes]
+    B --> C[Services<br/>auth · booking · fraud · plan]
     C --> D[Domain Rules<br/>booking.rules.ts]
     C --> E[Infrastructure<br/>Prisma · Providers · Queue]
-    E --> F[(PostgreSQL Neon)]
+    C --> F[Event System<br/>events.ts · event-handlers.ts]
+    E & F --> G[(PostgreSQL Neon)]
 ```
 
 ---
@@ -134,82 +172,96 @@ belo/
 │   ├── app/
 │   │   ├── layout.tsx               # Root layout + ThemeInit + LangProvider
 │   │   ├── error.tsx                # Erreur globale
-│   │   ├── globals.css              # Design tokens (CSS variables)
+│   │   ├── globals.css              # Design tokens (CSS variables light/dark)
 │   │   ├── sitemap.ts               # Sitemap dynamique
 │   │   │
 │   │   ├── (public)/                # Routes publiques (pas d'auth requise)
 │   │   │   ├── layout.tsx
 │   │   │   ├── page.tsx             # Landing page
-│   │   │   ├── login/page.tsx       # Login OTP
-│   │   │   ├── booking/[slug]/      # Réservation d'un salon
-│   │   │   │   ├── page.tsx
+│   │   │   ├── login/page.tsx       # Login OTP + sélecteur pays
+│   │   │   ├── booking/[slug]/      # Réservation d'un salon (4 étapes)
+│   │   │   │   ├── page.tsx         # use(params) pour Next.js 16
 │   │   │   │   └── loading.tsx
 │   │   │   ├── salons/              # Listing des salons
-│   │   │   │   ├── page.tsx
-│   │   │   │   └── loading.tsx
-│   │   │   ├── profil/page.tsx      # Profil client
+│   │   │   ├── profil/page.tsx      # Profil client + historique réservations
 │   │   │   ├── plans/page.tsx       # Tarifs
 │   │   │   ├── pour-les-salons/     # Page commerciale gérants
-│   │   │   └── confidentialite/     # Politique confidentialité
+│   │   │   └── confidentialite/
 │   │   │
 │   │   ├── dashboard/               # Espace gérant (auth: OWNER · STAFF · ADMIN)
-│   │   │   ├── layout.tsx           # Sidebar + auth guard + notif badge
-│   │   │   ├── loading.tsx
-│   │   │   ├── page.tsx             # Vue d'ensemble + KPIs
-│   │   │   ├── bookings/page.tsx    # Gestion réservations (accept/refuse)
-│   │   │   ├── services/page.tsx    # Gestion prestations
-│   │   │   ├── horaires/page.tsx    # Gestion créneaux
+│   │   │   ├── layout.tsx           # Auth guard + notif badge + redirect /login
+│   │   │   ├── page.tsx             # Vue d'ensemble + KPIs + quota
+│   │   │   ├── bookings/page.tsx    # Accept/Refuse · toast · pulseSoft animation
+│   │   │   ├── services/page.tsx    # CRUD services
+│   │   │   ├── horaires/page.tsx    # Génération créneaux
 │   │   │   ├── profil/page.tsx      # Paramètres salon
-│   │   │   └── equipe/page.tsx      # Gestion staff (plan PREMIUM)
+│   │   │   └── equipe/page.tsx      # Staff (plan PREMIUM)
 │   │   │
-│   │   ├── admin/                   # Super-admin panel (auth: SUPER_ADMIN)
-│   │   │   ├── layout.tsx
-│   │   │   └── page.tsx             # Mission Control + Tenants + Plans
-│   │   │
+│   │   ├── admin/                   # Control Panel (auth: SUPER_ADMIN via proxy)
+│   │   │   └── page.tsx             # 7 vues : Mission Control · Tenants · Plans
+│   │   │                            #          Fraude · Équipe · Logs · Réglages
 │   │   └── api/
 │   │       ├── auth/route.ts        # POST send-otp · verify-otp · refresh · logout
-│   │       ├── bookings/route.ts    # GET · POST · PATCH
+│   │       ├── bookings/route.ts    # GET · POST (maintenance check) · PATCH (tx)
 │   │       ├── tenants/
-│   │       │   ├── route.ts         # GET (listing) · POST (inscription salon)
-│   │       │   └── [slug]/route.ts  # GET (profil) · PATCH (màj)
+│   │       │   ├── route.ts         # GET · POST → emitEvent("tenant.created")
+│   │       │   └── [slug]/route.ts  # GET · PATCH
 │   │       ├── services/
 │   │       │   ├── route.ts         # GET · POST
 │   │       │   └── [id]/route.ts    # GET · PATCH · DELETE
-│   │       ├── slots/route.ts       # GET (dispo) · POST (génération) · DELETE
-│   │       ├── payments/route.ts    # POST init · POST refund · GET verify
-│   │       ├── plans/route.ts       # GET · PATCH (admin)
+│   │       ├── slots/route.ts       # GET · POST · DELETE
+│   │       ├── payments/route.ts    # POST init/refund · GET verify
+│   │       ├── plans/route.ts       # GET · PATCH → syncPlanToTenants()
 │   │       ├── staff/route.ts       # GET · POST · PATCH · DELETE
-│   │       ├── upload/route.ts      # POST (photos R2)
-│   │       ├── webhooks/route.ts    # POST Wave · Orange · Stripe
+│   │       ├── upload/route.ts      # POST (Cloudflare R2)
+│   │       ├── webhooks/route.ts    # Wave · Orange · Stripe (HMAC verify)
 │   │       ├── admin/
-│   │       │   └── tenants/route.ts # GET · POST actions (validate · block · …)
+│   │       │   ├── tenants/route.ts # GET · POST (validate/block/change_plan…)
+│   │       │   ├── fraud/route.ts   # GET · PATCH (review/close)
+│   │       │   ├── logs/route.ts    # GET (audit log paginé)
+│   │       │   ├── team/route.ts    # GET · PATCH (rôles admin)
+│   │       │   ├── settings/route.ts# GET · PATCH → emitEvent("settings.updated")
+│   │       │   ├── notifications/   # GET (unread count + list) · PATCH (mark read)
+│   │       │   └── stream/route.ts  # GET (EventLog feed – polling 5s)
 │   │       └── cron/
-│   │           ├── generate-slots/  # Génération auto créneaux
+│   │           ├── generate-slots/  # Génération auto créneaux J+14
 │   │           ├── notifications/   # Worker outbox WhatsApp
-│   │           └── purge-logs/      # Archivage NotificationLog
+│   │           ├── purge-logs/      # Archivage NotificationLog
+│   │           └── events/route.ts  # Retry EventLog (toutes les 2 min)
 │   │
 │   ├── components/
-│   │   ├── ThemeInit.tsx            # Dark/light mode (client-only, no hydration mismatch)
+│   │   ├── ThemeInit.tsx            # Dark/light mode (client-only)
 │   │   └── ui/
-│   │       ├── Nav.tsx              # PublicNav + DashboardNav
+│   │       ├── Nav.tsx              # PublicNav (i18n) + DashboardNav (notif badge)
 │   │       └── PhoneInput.tsx       # Sélecteur pays + indicatif international
 │   │
 │   ├── lib/
-│   │   ├── auth-client.ts           # getToken · getUser · setAuth · clearAuth · authHeaders
+│   │   ├── auth-client.ts           # getToken · getUser · setAuth · clearAuth
 │   │   ├── auth-guard.ts            # resolveRedirect() · DASHBOARD_ROLES · ADMIN_ROLES
-│   │   ├── route-auth.ts            # withAuth · withRole · withTenant · signJWT
+│   │   ├── route-auth.ts            # withAuth · withRole · withTenant
+│   │   │                            # withActiveTenant() — vérifie status ACTIVE
+│   │   ├── events.ts                # emitEvent() · onEvent() + EventLog persistence
+│   │   ├── event-handlers.ts        # Registre centralisé de tous les handlers
+│   │   ├── event-queue.ts           # processEventQueue() · getQueueHealth()
+│   │   ├── domain-events.ts         # DomainEvents factory (DDD) + emitDomainEvent()
+│   │   ├── audit.ts                 # createAuditLog() centralisé
+│   │   ├── settings.ts              # getAllSettings() · cache 30s · requireNotMaintenance()
+│   │   ├── api-fetch.ts             # apiFetch() avec credentials:include
 │   │   ├── cors.ts                  # getCorsHeaders() — allowlist origins
+│   │   ├── payment.ts               # canUsePayment() — FREE plan = pas de paiement
 │   │   ├── i18n.ts                  # Traductions FR/EN + type TranslationKey
 │   │   ├── lang-context.tsx         # LangProvider (Context React)
-│   │   ├── payment.ts               # canUsePayment() — règles plan
 │   │   ├── rate-limit.ts            # rateLimitByPhone() via AuditLog
 │   │   ├── money.ts                 # Formatage monétaire FCFA/EUR/USD
 │   │   ├── fetch-with-retry.ts      # Retry sur 503
-│   │   └── zod-formatter.ts         # Formatage erreurs Zod
+│   │   └── zod-formatter.ts         # Formatage erreurs Zod → JSON API
 │   │
 │   ├── services/
 │   │   ├── auth.service.ts          # sendOtp · verifyOtp · refreshAccessToken
-│   │   └── booking.service.ts       # createBooking · cancelBooking · getTenantBookings
+│   │   ├── booking.service.ts       # createBooking · cancelBooking · getTenantBookings
+│   │   │                            # → emitEvent("booking.created/cancelled")
+│   │   ├── fraud.service.ts         # runFraudCheck() · 6 signaux · auto-block ≥ 80
+│   │   └── plan.service.ts          # syncPlanToTenants() · resetTenantQuota()
 │   │
 │   ├── domain/
 │   │   └── booking/booking.rules.ts # Règles pures (testables sans DB)
@@ -217,7 +269,7 @@ belo/
 │   ├── infrastructure/
 │   │   ├── db/prisma.ts             # Client Prisma singleton
 │   │   ├── providers/payment.ts     # Wave · Orange · Stripe adapters
-│   │   └── queue/worker.ts          # Cron worker outbox
+│   │   └── queue/worker.ts          # Worker outbox WhatsApp
 │   │
 │   ├── hooks/
 │   │   ├── useLang.ts               # Re-export depuis lang-context
@@ -235,9 +287,15 @@ belo/
 │       └── en.json                  # Traductions anglaises
 │
 ├── prisma/
-│   ├── schema.prisma                # Schéma Prisma + enums + modèles
-│   ├── seed.ts                      # Données de test (salons, services, créneaux)
-│   └── migrations/                  # Migrations SQL versionnées
+│   ├── schema.prisma                # 12 modèles + enums
+│   ├── seed.ts                      # Données de test complètes
+│   └── migrations/
+│       ├── 20260501133736_init/
+│       ├── 20260502051121_add_auditlog_ratelimit_index/
+│       ├── 20260502060000_add_tenant_horaires/
+│       ├── 20260502070000_add_plan_config/
+│       ├── 20260504000000_admin_enhancements/   # PlanConfig limits/features + SystemSetting
+│       └── 20260504120000_event_log_and_notifications/ # EventLog + AdminNotification
 │
 ├── scripts/
 │   ├── fix-db.mjs                   # Fix +352→+221, purge OTP, upsert SUPER_ADMIN
@@ -254,7 +312,7 @@ belo/
 ├── next.config.js                   # Headers sécurité + images CDN
 ├── tailwind.config.ts
 ├── tsconfig.json
-├── tsconfig.seed.json               # TS config pour scripts Node
+├── tsconfig.seed.json
 └── DOCUMENTATION.md
 ```
 
@@ -262,7 +320,7 @@ belo/
 
 ## 5. Modèle de données
 
-### Diagramme entité-relation (simplifié)
+### Schéma complet (12 modèles)
 
 ```mermaid
 erDiagram
@@ -276,67 +334,89 @@ erDiagram
         bool   depositEnabled
         int    depositPercent
     }
-
     User {
         string id PK
         string phone UK
         enum   role
         string tenantId FK
     }
-
     Service {
         string id PK
         string tenantId FK
         string name
-        string category
         int    priceCents
         int    durationMin
     }
-
     Slot {
         string   id PK
         string   tenantId FK
-        string   serviceId FK
         datetime startsAt
-        datetime endsAt
         bool     isAvailable
     }
-
     Booking {
         string id PK
         string tenantId FK
         string userId FK
-        string serviceId FK
         string slotId FK
         enum   status
-        enum   paymentStatus
         int    priceCents
         string idempotencyKey UK
     }
-
     NotificationLog {
         string id PK
         string tenantId FK
-        string bookingId FK
         enum   type
         enum   status
         string channel
-        string recipient
         string idempotencyKey UK
     }
-
+    FraudAlert {
+        string id PK
+        string tenantId FK
+        int    riskScore
+        json   signals
+        enum   status
+    }
+    AuditLog {
+        string id PK
+        string tenantId FK
+        string actorId FK
+        string action
+        json   newValue
+    }
     PlanConfig {
         string id PK
         string plan UK
         int    priceFcfa
         int    priceEur
-        int    priceUsd
+        json   limits
+        json   features
+    }
+    SystemSetting {
+        string key PK
+        json   value
+    }
+    EventLog {
+        string id PK
+        string type
+        json   payload
+        string status
+        int    retries
+    }
+    AdminNotification {
+        string id PK
+        string type
+        string title
+        string tenantId FK
+        bool   read
     }
 
     Tenant ||--o{ User : "emploie"
     Tenant ||--o{ Service : "offre"
     Tenant ||--o{ Slot : "possède"
     Tenant ||--o{ Booking : "reçoit"
+    Tenant ||--o{ FraudAlert : "surveille"
+    Tenant ||--o{ AuditLog : "trace"
     User   ||--o{ Booking : "crée"
     Service||--o{ Booking : "concerne"
     Slot   ||--o{ Booking : "occupe"
@@ -353,13 +433,35 @@ erDiagram
 | `BookingStatus` | `PENDING` · `CONFIRMED` · `COMPLETED` · `CANCELLED` · `NO_SHOW` |
 | `PaymentStatus` | `PENDING` · `PAID` · `REFUNDED` · `FAILED` |
 | `PaymentProvider` | `WAVE` · `ORANGE_MONEY` · `STRIPE` · `PAYSTACK` · `MTN_MONEY` · `CASH` |
+| `FraudStatus` | `NEW` · `UNDER_REVIEW` · `ACTION_TAKEN` · `CLOSED` |
 | `NotifType` | `BOOKING_CONFIRMED` · `BOOKING_REMINDER` · `BOOKING_CANCELLED` · `BOOKING_COMPLETED` · `PAYMENT_RECEIVED` · `WELCOME` · `PROMO` |
+
+### PlanConfig — limites dynamiques
+
+```json
+{
+  "limits":   { "bookingsPerMonth": 20, "services": 3, "staff": 0, "photosPerService": 3 },
+  "features": { "deposit": false, "whatsapp": false, "analytics": false, "prioritySupport": false, "customDomain": false }
+}
+```
+
+Ces valeurs sont modifiables depuis le panneau admin → Plans sans migration SQL.
+
+### EventLog — file d'événements persistante
+
+| Champ | Type | Description |
+|---|---|---|
+| `type` | string | `"tenant.blocked"`, `"booking.created"`, etc. |
+| `status` | string | `pending` · `processing` · `processed` · `failed` |
+| `retries` | int | Nombre de tentatives de retraitement |
+| `maxRetries` | int | Maximum (défaut 3) |
+| `error` | string? | Dernière erreur catchée |
 
 ---
 
 ## 6. Authentification & Sécurité
 
-### Flux OTP
+### Flux OTP complet
 
 ```mermaid
 sequenceDiagram
@@ -370,73 +472,264 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant WA as WhatsApp API
 
-    U->>L: Saisit numéro (pays + local)
-    L->>L: normalizePhone() → E.164
+    U->>L: Saisit numéro (sélecteur pays + local)
+    L->>L: normalizePhone() → E.164 (+221771234567)
     L->>A: POST /api/auth?action=send-otp
-    A->>A: rateLimitByPhone (max 3 / 2min)
+    A->>A: rateLimitByPhone (max 3 / 2 min)
     A->>S: sendOtp(phone)
-    S->>S: Génère OTP 6 chiffres + hash SHA-256
-    S->>DB: INSERT auditLog {action:"otp.sent", hashedOtp, expiresAt}
+    S->>S: Génère OTP 6 chiffres + hash SHA-256 + JWT_SECRET
+    S->>DB: INSERT AuditLog {action:"otp.sent", hashedOtp, expiresAt}
     S->>WA: Envoie message WhatsApp direct
     A-->>L: { sent: true, phoneMask }
 
     U->>L: Saisit le code OTP
     L->>A: POST /api/auth?action=verify-otp
-    A->>A: rateLimitByPhone (max 5 / 15min)
+    A->>A: rateLimitByPhone (max 5 / 15 min)
     A->>S: verifyOtp(phone, otp)
-    S->>DB: SELECT dernier auditLog otp.sent pour ce numéro
+    S->>DB: SELECT dernier AuditLog otp.sent
     S->>S: Vérifie hash + expiration (10 min)
-    S->>DB: UPSERT User (crée CLIENT si inconnu)
+    S->>DB: UPSERT User (crée CLIENT si premier login)
     S->>S: Signe JWT HS256 (sub, role, tenantId)
     A->>A: Set httpOnly cookie belo_token (7j)
-    A-->>L: { accessToken, user: {id, name, phone, role, tenantId} }
+    A-->>L: { accessToken, user }
     L->>L: localStorage.setItem(token, user)
     L->>L: router.replace(resolveRedirect(user))
 ```
 
-### JWT & Proxy
+### JWT & stockage
 
-- **Algorithme** : HS256 (via `jose`)
+- **Algorithme** : HS256 (via `jose`) — signature vérifiée à chaque requête
 - **Payload** : `{ sub: userId, role, tenantId? }`
 - **Durée** : 7 jours (access) · 30 jours (refresh)
-- **Stockage** : httpOnly cookie `belo_token` (SameSite=Lax) + `localStorage` (pour les headers API)
+- **Stockage** : httpOnly cookie `belo_token` (SameSite=Lax, Secure en prod) + `localStorage` pour les headers API fetch
 
-### proxy.ts — Interception Edge
+### proxy.ts — Interception Edge (Next.js 16)
 
 ```typescript
-// Règles d'accès appliquées à chaque requête avant le rendu
-/admin      → rôles : ADMIN · SUPER_ADMIN          (sinon → /)
-/dashboard  → rôles : OWNER · STAFF · ADMIN · SUPER_ADMIN  (sinon → /)
-/profil     → utilisateur authentifié              (sinon → /login)
-/api/admin  → ADMIN · SUPER_ADMIN + injection x-user-id/role (sinon 401/403)
+// Règles appliquées AVANT le rendu de chaque page
+
+/admin      → JWT cookie requis · rôle: ADMIN ou SUPER_ADMIN (sinon → /)
+/dashboard  → JWT cookie requis · rôle: OWNER/STAFF/ADMIN/SUPER_ADMIN (sinon → /login)
+/profil     → JWT cookie requis · tout rôle authentifié (sinon → /login)
+/api/admin  → JWT Bearer/cookie · ADMIN/SUPER_ADMIN · injection x-user-id/role
+```
+
+### `withActiveTenant()` — enforcement global
+
+```typescript
+// Vérifie existence + statut ACTIVE du tenant avant toute opération métier
+const check = await withActiveTenant(auth, tenantId);
+if (!check.ok) return check.response; // 404 TENANT_NOT_FOUND ou 403 TENANT_INACTIVE
+```
+
+### `requireNotMaintenance()` — mode maintenance
+
+```typescript
+// Appelé en tête de POST /api/bookings
+await requireNotMaintenance(); // → 503 si maintenance_mode = true en DB
 ```
 
 ---
 
-## 7. Flux de navigation
+## 7. Système d'événements
+
+### Architecture event-driven
+
+Le système d'événements de Belo est **synchrone en mémoire** (effets immédiats dans la même requête) avec **persistance asynchrone** dans EventLog (pour le retry et l'audit trail).
+
+```
+emitEvent("tenant.blocked", payload)
+    │
+    ├── 1. INSERT EventLog (status=pending) — fire-and-forget
+    │
+    └── 2. Dispatch synchrone des handlers
+              │
+              ├── createAuditLog()
+              ├── runFraudCheck()  (sur booking.cancelled / payment.failed)
+              ├── AdminNotification.create()  (sur tenant.created / fraud≥60)
+              └── invalidateSettingsCache()  (sur settings.updated / plan.updated)
+```
+
+### Types d'événements
+
+| Event | Payload | Déclenché par |
+|---|---|---|
+| `tenant.blocked` | `{ tenantId, tenantName?, adminId?, reason? }` | Admin action / fraud engine |
+| `tenant.activated` | `{ tenantId, tenantName?, adminId? }` | Admin validate/reactivate |
+| `tenant.suspended` | `{ tenantId, tenantName?, adminId?, reason? }` | Admin action |
+| `tenant.created` | `{ tenantId, tenantName, ownerId, plan? }` | POST /api/tenants |
+| `plan.updated` | `{ plan, changes, adminId?, tenantCount? }` | PATCH /api/plans |
+| `payment.failed` | `{ bookingId, tenantId, reason? }` | Webhook / route |
+| `booking.created` | `{ bookingId, tenantId, userId, priceCents }` | createBooking() |
+| `booking.cancelled` | `{ bookingId, tenantId, cancelledBy?, reason? }` | cancelBooking() |
+| `fraud.detected` | `{ tenantId, tenantName?, riskScore, signals[] }` | fraud.service |
+| `settings.updated` | `{ keys[], adminId? }` | PATCH /api/admin/settings |
+
+### Domain Events (DDD)
+
+```typescript
+import { DomainEvents, emitDomainEvent } from "@/lib/domain-events";
+
+// Utilisation avec envelope typée (eventId + occurredAt + schemaVersion)
+await emitDomainEvent(
+  DomainEvents.tenantBlocked({ tenantId, adminId, reason })
+);
+```
+
+### EventLog — retry queue
+
+Le cron `/api/cron/events` (toutes les 2 min) retraite les entrées `pending` :
+
+```typescript
+// event-queue.ts — SELECT FOR UPDATE SKIP LOCKED (concurrent-safe)
+const stats = await processEventQueue(100);
+// → { processed: N, failed: M, skipped: 0 }
+```
+
+Lifecycle d'une entrée EventLog :
+```
+pending → processing → processed ✓
+                    └→ pending (retry si retries < maxRetries)
+                    └→ failed ✗ (après maxRetries = 3 tentatives)
+```
+
+### Enregistrement des handlers
+
+```typescript
+// Importé en side-effect dans chaque service/route qui appelle emitEvent()
+import "@/lib/event-handlers";
+
+// Enregistrement (module cache → 1 seule fois par instance warm)
+onEvent("tenant.created", async ({ tenantId, tenantName, ownerId }) => {
+  await prisma.adminNotification.create({ ... });
+});
+```
+
+---
+
+## 8. Fraud Engine
+
+### Vue d'ensemble
+
+Le fraud engine analyse les comportements des tenants après chaque annulation ou échec de paiement. Il maintient un score de 0 à 100 et crée automatiquement des alertes.
+
+```
+score 0–29   → clean (aucune action)
+score 30–59  → watch (NEW FraudAlert créée)
+score 60–79  → risky (AdminNotification envoyée)
+score ≥ 80   → critique (tenant.status = FRAUD, auto-bloqué)
+```
+
+### 6 signaux détectés
+
+| Signal | Condition | Poids |
+|---|---|---|
+| `high_cancellations_24h` | > 5 annulations en 24h | +8 par excès (max 40) |
+| `high_cancellation_rate_30d` | Taux annulation > 40% sur 30j | Jusqu'à +30 |
+| `quota_gaming_suspected` | Quota élevé mais très peu de vrais bookings | +20 |
+| `booking_velocity_spike` | > 20 créations en 1h (comportement bot) | +3 par excès (max 35) |
+| `existing_fraud_alert` | Alerte active avec score > 50 | +30% du score existant |
+| `cross_tenant_canceller` | Utilisateur annulant dans ≥ 2 autres tenants (24h) | +5 par utilisateur (max 25) |
+
+### Appel automatique
+
+```typescript
+// booking.service.ts — après cancelBooking()
+emitEvent("booking.cancelled", { bookingId, tenantId }).catch(() => {});
+// → event-handlers.ts → runFraudCheck(tenantId)
+
+// event-handlers.ts — sur payment.failed
+onEvent("payment.failed", async ({ tenantId }) => {
+  await runFraudCheck(tenantId);
+});
+```
+
+### Alerte admin
+
+Quand `riskScore ≥ 60`, une `AdminNotification` est automatiquement créée :
+```
+type:  "fraud_alert"
+title: "⚠️ Alerte fraude : Studio Elégance"
+body:  "Score de risque : 72/100. Signaux : high_cancellations_24h, cross_tenant_canceller."
+```
+
+---
+
+## 9. Admin Control Panel
+
+### 7 vues fonctionnelles
+
+| Vue | Données | Actions |
+|---|---|---|
+| **Mission Control** | KPIs live · queue validation PENDING · logs récents | Valider tenants en 1 clic |
+| **Tenants** | Tableau filtrable · statut coloré · bookings | validate · block · suspend · change_plan |
+| **Plans** | Prix FCFA/EUR + limites + features | Éditer prix · limites · features toggles |
+| **Fraude** | FraudAlert avec risk score et signaux | Enquêter · Action · Clore |
+| **Équipe** | Admins SUPER_ADMIN/ADMIN · lastLogin | Voir rôles |
+| **Logs** | AuditLog paginé · actor · tenant | Filtrer · Paginer |
+| **Réglages** | Maintenance · commission slider · providers actifs · OTP bypass | Sauvegarder |
+
+### `apiFetch()` — sécurité cookie
+
+Tous les appels admin utilisent `credentials: "include"` :
+
+```typescript
+// lib/api-fetch.ts
+const res = await apiFetch("/api/admin/tenants", {
+  method: "POST",
+  body: JSON.stringify({ action: "block" }),
+});
+// → Le cookie httpOnly belo_token est envoyé automatiquement
+// → Aucun token ne transite en JS
+```
+
+### Live Feed — `/api/admin/stream`
+
+Le Mission Control poll toutes les 5 secondes :
+
+```typescript
+GET /api/admin/stream?since=2026-05-04T10:00:00Z&limit=30
+→ { events: EventLog[], cursor: ISO8601, health: QueueHealth }
+```
+
+### Notifications admin — `/api/admin/notifications`
+
+```typescript
+GET  /api/admin/notifications         → { notifications[], unreadCount }
+PATCH /api/admin/notifications?id=X   → mark as read
+PATCH /api/admin/notifications?all=1  → mark all as read
+```
+
+Types de notifications automatiques :
+- `tenant_validation_required` — nouveau salon inscrit
+- `fraud_alert` — score fraude ≥ 60
+
+---
+
+## 10. Flux de navigation
 
 ### Parcours Client (réservation)
 
 ```mermaid
 flowchart TD
-    A([Visiteur]) --> B[Landing page /]
+    A([Visiteur]) --> B[Landing /]
     B --> C[Listing /salons]
     C --> D[Fiche salon /booking/:slug]
-    D --> E{Connecté ?}
+    D --> E{Token ?}
     E -- Non --> F[Login OTP /login]
     F --> G{Rôle ?}
     G -- CLIENT --> D
     E -- Oui --> H[Étape 1 — Choisir service]
     H --> I[Étape 2 — Choisir créneau]
     I --> J[Étape 3 — Confirmer + WhatsApp]
-    J --> K{Dépôt activé ?}
-    K -- Non --> L[POST /api/bookings]
+    J --> K{Plan PRO+ + dépôt ?}
+    K -- Non --> L[POST /api/bookings<br/>→ emitEvent booking.created]
     K -- Oui --> M[POST /api/payments/init]
-    M --> N[Redirection Wave / OM / Stripe]
+    M --> N[Wave / OM / Stripe]
     N --> O[POST /api/webhooks]
-    L --> P[Étape 4 — Confirmation ✅]
+    L --> P[Étape 4 ✅ Confirmation]
     O --> P
-    P --> Q[Voir mes réservations /profil]
+    P --> Q[/profil historique]
 ```
 
 ### Parcours Gérant (dashboard)
@@ -444,21 +737,13 @@ flowchart TD
 ```mermaid
 flowchart TD
     A([Gérant]) --> B[Login OTP]
-    B --> C{Rôle ?}
-    C -- OWNER / STAFF --> D[Dashboard /dashboard]
-    D --> E[Vue d'ensemble KPIs]
-    D --> F[Réservations /dashboard/bookings]
-    F --> G{Action sur PENDING}
-    G -- Accepter --> H[PATCH /api/bookings CONFIRMED]
-    G -- Refuser --> I[PATCH /api/bookings CANCELLED]
-    D --> J[Services /dashboard/services]
-    J --> K[POST /api/services]
-    D --> L[Horaires /dashboard/horaires]
-    L --> M[POST /api/slots]
-    D --> N[Profil salon /dashboard/profil]
-    N --> O[PATCH /api/tenants/:slug]
-    D --> P[Équipe /dashboard/equipe]
-    P --> Q[POST /api/staff]
+    B --> C[Dashboard /dashboard]
+    C --> D[KPIs + quota]
+    C --> E[Réservations]
+    E --> F{PENDING}
+    F -- Accepter --> G[PATCH CONFIRMED → pulseSoft animation]
+    F -- Refuser --> H[PATCH CANCELLED → runFraudCheck]
+    C --> I[Services · Horaires · Profil · Équipe]
 ```
 
 ### Parcours Super-Admin
@@ -466,100 +751,116 @@ flowchart TD
 ```mermaid
 flowchart TD
     A([Super Admin]) --> B[Login 661000001]
-    B --> C[Admin Panel /admin]
-    C --> D[Mission Control]
-    C --> E[Tenants]
-    E --> F{Action}
-    F --> G[Valider salon]
-    F --> H[Bloquer / Suspendre]
-    F --> I[Changer plan]
-    F --> J[Envoyer message]
-    G --> K[POST /api/admin/tenants?action=do-action]
-    H --> K
-    I --> K
-    C --> L[Plans & Tarifs]
-    L --> M[PATCH /api/plans]
-    C --> N[Fraude / Logs]
+    B --> C[Admin /admin]
+    C --> D[Mission Control<br/>KPIs + stream live]
+    C --> E[Tenants<br/>validate/block/change_plan]
+    E --> F[→ emitEvent tenant.blocked/activated<br/>→ resetTenantQuota si change_plan]
+    C --> G[Plans<br/>prix + limites + features]
+    G --> H[→ syncPlanToTenants<br/>→ emitEvent plan.updated]
+    C --> I[Fraude<br/>Alerts V2 · 6 signaux]
+    C --> J[Logs · Équipe · Réglages]
+    J --> K[maintenance_mode → blocage /api/bookings<br/>→ emitEvent settings.updated]
 ```
 
 ---
 
-## 8. API Routes — référence
+## 11. API Routes — référence complète
 
 ### Authentification
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/auth?action=send-otp` | — | Envoie OTP WhatsApp |
-| `POST` | `/api/auth?action=verify-otp` | — | Vérifie OTP → retourne JWT |
+| `POST` | `/api/auth?action=send-otp` | — | Envoie OTP WhatsApp · rate limit 3/2min |
+| `POST` | `/api/auth?action=verify-otp` | — | Vérifie OTP → JWT + cookies httpOnly |
 | `POST` | `/api/auth?action=refresh` | cookie | Rafraîchit l'access token |
-| `POST` | `/api/auth?action=logout` | — | Efface cookies |
+| `POST` | `/api/auth?action=logout` | — | Efface cookies belo_token + belo_refresh |
 
 ### Salons (Tenants)
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/tenants` | — | Liste salons actifs (filtres, pagination) |
-| `POST` | `/api/tenants` | CLIENT | Inscription nouveau salon |
-| `GET` | `/api/tenants/:slug` | — | Profil public du salon + services |
-| `PATCH` | `/api/tenants/:slug` | OWNER · ADMIN | Mise à jour profil salon |
+| `GET` | `/api/tenants` | — | Liste salons ACTIVE · filtres · Cache-Control 2min |
+| `POST` | `/api/tenants` | CLIENT | Inscription → **emitEvent("tenant.created")** |
+| `GET` | `/api/tenants/:slug` | — | Profil public + services · Cache 60s |
+| `PATCH` | `/api/tenants/:slug` | OWNER · ADMIN | Màj profil · horaires · socials |
 
 ### Services
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/services?tenantId=` | — | Liste services d'un salon |
-| `POST` | `/api/services` | OWNER | Créer un service |
-| `PATCH` | `/api/services/:id` | OWNER | Modifier un service |
-| `DELETE` | `/api/services/:id` | OWNER | Désactiver un service |
+| `GET` | `/api/services?tenantId=` | — | Liste · Cache 2min |
+| `POST` | `/api/services` | OWNER | Crée · vérifie limite plan |
+| `PATCH` | `/api/services/:id` | OWNER | Modifie |
+| `DELETE` | `/api/services/:id` | OWNER | Soft-delete (isActive=false si bookings passés) |
 
 ### Créneaux
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/slots?tenantId=&serviceId=&date=` | — | Créneaux disponibles |
-| `POST` | `/api/slots` | OWNER | Génère des créneaux en masse |
-| `DELETE` | `/api/slots?slotId=` | OWNER | Supprime un créneau libre |
+| `GET` | `/api/slots?tenantId=&serviceId=&date=` | — | Disponibles · Cache 60s |
+| `POST` | `/api/slots` | OWNER | Génération en masse (max 90j) |
+| `DELETE` | `/api/slots?slotId=` | OWNER | Supprime si libre |
 
 ### Réservations
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/bookings` | CLIENT | Créer une réservation (idempotent) |
-| `GET` | `/api/bookings?tenantId=` | OWNER | Liste réservations du salon |
+| `POST` | `/api/bookings` | CLIENT | Crée · idempotent · **requireNotMaintenance()** · **emitEvent("booking.created")** |
+| `GET` | `/api/bookings?tenantId=` | OWNER | Liste salon · filtre statut/date |
 | `GET` | `/api/bookings?userId=` | CLIENT | Historique client |
-| `PATCH` | `/api/bookings` | OWNER | Accepter / Refuser (CONFIRMED / CANCELLED) |
+| `PATCH` | `/api/bookings` | OWNER | CONFIRMED/CANCELLED · transaction atomique · **emitEvent("booking.cancelled")** si CANCELLED |
 
 ### Paiements
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/payments?action=init` | CLIENT | Initie session paiement (Wave / OM / Stripe) |
-| `GET` | `/api/payments?bookingId=` | CLIENT | Vérifie statut paiement |
+| `POST` | `/api/payments?action=init` | CLIENT | Initie Wave/OM/Stripe |
+| `GET` | `/api/payments?bookingId=` | CLIENT | Vérifie statut |
 | `POST` | `/api/payments?action=refund` | OWNER (PREMIUM) | Remboursement |
-| `POST` | `/api/webhooks` | HMAC | Callback Wave · Orange · Stripe |
+| `POST` | `/api/webhooks` | HMAC | Callback Wave · Orange · Stripe (idempotent) |
 
-### Admin
+### Admin — Tenants
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/admin/tenants` | ADMIN | Liste tous les salons + stats |
-| `POST` | `/api/admin/tenants?action=do-action&id=` | ADMIN | validate · block · suspend · change_plan |
-| `POST` | `/api/admin/tenants?action=bulk` | ADMIN | Actions en masse |
-| `GET` | `/api/plans` | — | Tarifs des plans |
-| `PATCH` | `/api/plans` | ADMIN | Modifier les tarifs |
+| `GET` | `/api/admin/tenants` | ADMIN | Liste + stats + filtres + tri |
+| `POST` | `/api/admin/tenants?action=do-action&id=` | ADMIN | validate · block · suspend · reactivate · change_plan · send_message |
+| `POST` | `/api/admin/tenants?action=bulk` | ADMIN | Actions en masse (max 50) |
+
+### Admin — Autres modules
+
+| Méthode | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/admin/fraud` | ADMIN | Liste FraudAlerts + tenant |
+| `PATCH` | `/api/admin/fraud?id=` | ADMIN | UNDER_REVIEW · ACTION_TAKEN · CLOSED |
+| `GET` | `/api/admin/logs` | ADMIN | AuditLog paginé · filtres action/entity |
+| `GET` | `/api/admin/team` | ADMIN | Utilisateurs ADMIN/SUPER_ADMIN |
+| `PATCH` | `/api/admin/team?id=` | SUPER_ADMIN | Change rôle (tracé en audit) |
+| `GET` | `/api/admin/settings` | ADMIN | Config système (cache 30s) |
+| `PATCH` | `/api/admin/settings` | SUPER_ADMIN | Màj + **emitEvent("settings.updated")** + invalidation cache |
+| `GET` | `/api/admin/notifications` | ADMIN | Inbox + unreadCount |
+| `PATCH` | `/api/admin/notifications` | ADMIN | Mark read / mark all read |
+| `GET` | `/api/admin/stream` | ADMIN | EventLog feed (polling 5s) + queue health |
+
+### Plans
+
+| Méthode | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/plans` | — | Tarifs + limits + features · Cache 5min |
+| `PATCH` | `/api/plans` | ADMIN | Màj prix/limites/features → **syncPlanToTenants()** |
 
 ### Cron jobs
 
-| Endpoint | Déclencheur | Description |
+| Endpoint | Fréquence | Description |
 |---|---|---|
-| `/api/cron/generate-slots` | Vercel Cron (quotidien) | Génère les créneaux J+14 |
-| `/api/cron/notifications` | Vercel Cron (toutes les 30s) | Worker outbox WhatsApp |
-| `/api/cron/purge-logs` | Vercel Cron (hebdomadaire) | Archive NotificationLog ancien |
+| `/api/cron/generate-slots` | quotidien 02h00 | Génère créneaux J+14 |
+| `/api/cron/notifications` | toutes les minutes | Worker outbox WhatsApp |
+| `/api/cron/purge-logs` | hebdomadaire dim 03h00 | Archive NotificationLog |
+| `/api/cron/events` | toutes les 2 minutes | Retry EventLog (SELECT FOR UPDATE SKIP LOCKED) |
 
 ---
 
-## 9. Contrôle d'accès par rôle (RBAC)
+## 12. Contrôle d'accès par rôle (RBAC)
 
 ```mermaid
 graph TD
@@ -569,32 +870,27 @@ graph TD
         OW[OWNER]
         ST[STAFF]
         CL[CLIENT]
-        GU[Visiteur anonyme]
+        GU[Anonyme]
     end
 
-    subgraph Accès
+    subgraph Pages
         ADM[/admin]
         DASH[/dashboard/*]
         PROF[/profil]
         PUB[/ · /salons · /booking/*]
-        APIAD[/api/admin/*]
-        APIPRIV[/api/bookings PATCH]
     end
 
-    SA --> ADM
-    SA --> DASH
-    AD --> ADM
-    AD --> DASH
-    OW --> DASH
-    ST --> DASH
-    CL --> PROF
-    CL --> PUB
-    GU --> PUB
+    subgraph API
+        APIAD[/api/admin/*]
+        APIBOOK_W[/api/bookings PATCH]
+        APIBOOK_R[/api/bookings GET]
+        APIPUB[/api/tenants GET<br/>/api/slots GET]
+    end
 
-    SA --> APIAD
-    AD --> APIAD
-    OW --> APIPRIV
-    ST --> APIPRIV
+    SA & AD --> ADM & DASH & APIAD
+    OW & ST --> DASH & APIBOOK_W & APIBOOK_R
+    CL --> PROF & PUB & APIPUB
+    GU --> PUB & APIPUB
 ```
 
 ### `resolveRedirect()` — destination post-login
@@ -606,6 +902,7 @@ ADMIN        → /dashboard
 OWNER        → /dashboard
 STAFF        → /dashboard
 CLIENT       → /profil
+null         → /login
 ```
 
 ### Limites par plan
@@ -614,241 +911,83 @@ CLIENT       → /profil
 |---|---|---|---|
 | Bookings / mois | 20 | 500 | Illimités |
 | Services | 3 | 20 | Illimités |
+| Staff max | 0 | 5 | Illimités |
+| Photos / service | 3 | 10 | 50 |
 | WhatsApp auto | ✗ | ✓ | ✓ |
 | Dépôt / acompte | ✗ | ✓ | ✓ |
+| Analytics | ✗ | ✗ | ✓ |
 | Remboursement auto | ✗ | ✗ | ✓ |
-| Équipe | ✗ | ✗ | ✓ |
-| Photos / service | 3 | 10 | 50 |
+| Domaine custom | ✗ | ✗ | ✓ |
+
+> Ces limites sont stockées en JSON dans `PlanConfig.limits` et `PlanConfig.features`, modifiables depuis l'admin sans migration.
 
 ---
 
-## 10. i18n — Internationalisation
+## 13. i18n — Internationalisation
 
-Le système utilise un **Context React** (`LangProvider`) comme source unique pour la langue.
-
-```
-src/
-├── lib/
-│   ├── i18n.ts          # Objet translations { fr: {...}, en: {...} } + type TranslationKey
-│   └── lang-context.tsx  # LangProvider + useLang() hook
-├── hooks/
-│   └── useLang.ts        # Re-export depuis lang-context (backward compat)
-└── messages/
-    ├── fr.json           # Traductions supplémentaires FR
-    └── en.json           # Traductions supplémentaires EN
-```
-
-### Utilisation dans un composant
-
-```tsx
+```typescript
+// Utilisation dans un composant
 import { useLang } from "@/hooks/useLang";
 
-export function MonComposant() {
-  const { t, lang, setLang } = useLang();
-
-  return (
-    <>
-      <h1>{t("hero_title")}</h1>
-      <button onClick={() => setLang(lang === "fr" ? "en" : "fr")}>
-        {lang === "fr" ? "EN" : "FR"}
-      </button>
-    </>
-  );
-}
+const { t, lang, setLang } = useLang();
+// t("hero_title")   → "La beauté réservée" (fr) | "Beauty, booked" (en)
+// setLang("en")     → persiste en localStorage + dispatch event
 ```
 
-### Clés de traduction disponibles (espaces de noms)
-
-| Namespace | Exemples de clés |
+| Namespace | Clés disponibles |
 |---|---|
-| `common` | `nav_discover` · `hero_title` · `hero_sub` · `search_btn` |
-| `booking` | `choose_service` · `choose_slot` · `confirm_booking` · `no_slots` |
-| `dashboard` | `login_title` · `send_code` · `connect` · `resend` |
+| `common` | `nav_discover` · `hero_title` · `hero_title2` · `hero_sub` · `hero_desc` · `featured_salons` · `see_all` · `cta_find` · ... |
+| `booking` | `choose_service` · `choose_slot` · `confirm_booking` · `no_slots` · `how_title` · `step1_title` · ... |
+| `dashboard` | `login_title` · `send_code` · `connect` · `resend` · `back_home` · ... |
 
 ---
 
-## 11. PWA — Bouton d'installation
+## 14. PWA — Bouton d'installation
 
-### Configuration existante
-
-Le fichier `public/manifest.json` est déjà présent et déclaré dans la balise `<head>` via les métadonnées Next.js.
-
-```json
-// public/manifest.json (structure)
-{
-  "name": "Belo",
-  "short_name": "Belo",
-  "description": "Réservation salons de beauté",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#07080d",
-  "theme_color": "#22d38a",
-  "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
-  ]
-}
-```
-
-### Composant `InstallPWA`
-
-Créer `src/components/InstallPWA.tsx` :
+Le fichier `public/manifest.json` est présent. Pour afficher un bouton d'installation sur mobile :
 
 ```tsx
+// src/components/InstallPWA.tsx — affiche uniquement sur mobile si PWA installable
 "use client";
 import { useEffect, useState } from "react";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
 export default function InstallPWA() {
-  const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [prompt, setPrompt] = useState<any>(null);
 
   useEffect(() => {
-    // N'afficher que sur mobile (largeur ≤ 768px) et si PWA installable
-    const isMobile = window.innerWidth <= 768;
-    if (!isMobile) return;
-
-    // Masquer si déjà en mode standalone (app installée)
+    if (window.innerWidth > 768) return;
     if (window.matchMedia("(display-mode: standalone)").matches) return;
-
-    const handler = (e: Event) => {
+    window.addEventListener("beforeinstallprompt", (e) => {
       e.preventDefault();
-      setPrompt(e as BeforeInstallPromptEvent);
-      setVisible(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+      setPrompt(e);
+    });
   }, []);
 
-  async function handleInstall() {
-    if (!prompt) return;
-    await prompt.prompt();
-    const { outcome } = await prompt.userChoice;
-    if (outcome === "accepted") setVisible(false);
-  }
-
-  if (!visible) return null;
+  if (!prompt) return null;
 
   return (
-    <div style={{
-      position: "fixed", bottom: 80, left: 16, right: 16, zIndex: 999,
-      background: "var(--card)", border: "1px solid var(--border2)",
-      borderRadius: 16, padding: "16px 20px",
-      display: "flex", alignItems: "center", gap: 14,
-      boxShadow: "0 8px 32px rgba(0,0,0,.35)",
-    }}>
-      <div style={{
-        width: 44, height: 44, borderRadius: 10,
-        background: "linear-gradient(135deg, var(--g1), var(--g2))",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 22, flexShrink: 0,
-      }}>✦</div>
-
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>
-          Installer l'app Belo
-        </div>
-        <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.4 }}>
-          Accès rapide · Fonctionne hors-ligne
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <button
-          type="button"
-          onClick={() => setVisible(false)}
-          style={{
-            padding: "7px 12px", borderRadius: 9,
-            border: "1px solid var(--border2)", background: "transparent",
-            color: "var(--text3)", fontSize: 12, cursor: "pointer",
-          }}
-        >
-          Plus tard
-        </button>
-        <button
-          type="button"
-          onClick={handleInstall}
-          style={{
-            padding: "7px 14px", borderRadius: 9, border: "none",
-            background: "var(--g)", color: "#fff",
-            fontWeight: 700, fontSize: 12, cursor: "pointer",
-          }}
-        >
-          Installer
-        </button>
-      </div>
-    </div>
+    <button onClick={() => prompt.prompt()}>
+      Installer l'app Belo
+    </button>
   );
 }
 ```
 
-### Intégration dans le layout public
-
-```tsx
-// src/app/(public)/layout.tsx
-import InstallPWA from "@/components/InstallPWA";
-
-export default function PublicLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      {children}
-      <InstallPWA />
-    </>
-  );
-}
-```
-
-### Conditions d'affichage du bouton
-
-| Condition | Comportement |
-|---|---|
-| Navigateur mobile (largeur ≤ 768px) | Affiché si prompt disponible |
-| App déjà installée (standalone mode) | Masqué |
-| Desktop | Masqué |
-| Safari iOS | Le bouton ne s'affiche pas (API non supportée) — utiliser une bannière manuelle |
-| Chrome Android | Affiché automatiquement (API `beforeinstallprompt`) |
-
-> **Note iOS Safari** : `beforeinstallprompt` n'est pas supporté. Pour iOS, afficher un message
-> manuel "Appuyer sur le bouton Partager → Ajouter à l'écran d'accueil".
-
-### Service Worker (optionnel — offline support)
-
-Pour activer le cache offline, ajouter dans `next.config.js` avec `next-pwa` :
-
-```bash
-npm install next-pwa
-```
-
-```js
-// next.config.js
-const withPWA = require("next-pwa")({
-  dest: "public",
-  disable: process.env.NODE_ENV === "development",
-  register: true,
-  skipWaiting: true,
-});
-
-module.exports = withPWA({ /* ...nextConfig */ });
-```
+> **iOS Safari** : `beforeinstallprompt` non supporté → afficher un message manuel "Partager → Ajouter à l'écran d'accueil".
 
 ---
 
-## 12. Variables d'environnement
+## 15. Variables d'environnement
 
 ### Obligatoires
 
 ```bash
 # Base de données (Neon PostgreSQL)
 DATABASE_URL="postgresql://user:pass@host/db?sslmode=require&pgbouncer=true"
-DIRECT_URL="postgresql://user:pass@host/db?sslmode=require"   # migrations
+DIRECT_URL="postgresql://user:pass@host/db?sslmode=require"  # migrations directes
 
 # JWT
-JWT_SECRET="minimum-32-caracteres-secret-aleatoire"
+JWT_SECRET="minimum-32-caracteres-aleatoires"
 JWT_EXPIRES_IN="7d"
 REFRESH_TOKEN_EXPIRES_IN="30d"
 
@@ -857,13 +996,13 @@ NEXT_PUBLIC_APP_URL="https://belo-khaki.vercel.app"
 CRON_SECRET="secret-pour-proteger-les-crons"
 ```
 
-### Paiements (selon les providers activés)
+### Paiements
 
 ```bash
-WAVE_API_KEY="..."
-WAVE_WEBHOOK_SECRET="..."
-ORANGE_API_KEY="..."
-ORANGE_MERCHANT_ID="..."
+WAVE_API_KEY=""
+WAVE_WEBHOOK_SECRET=""
+ORANGE_API_KEY=""
+ORANGE_MERCHANT_ID=""
 STRIPE_SECRET_KEY="sk_live_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_..."
@@ -872,135 +1011,109 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_..."
 ### WhatsApp
 
 ```bash
-WHATSAPP_PHONE_ID="..."
-WHATSAPP_TOKEN="..."
-# OTP_BYPASS=true  # Dev uniquement — affiche OTP dans les logs
+WHATSAPP_PHONE_ID=""
+WHATSAPP_TOKEN=""
+# OTP_BYPASS=true   # Dev : affiche OTP dans les logs serveur
 ```
 
 ### Stockage médias
 
 ```bash
-R2_ACCOUNT_ID="..."
-R2_ACCESS_KEY="..."
-R2_SECRET_KEY="..."
+R2_ACCOUNT_ID=""
+R2_ACCESS_KEY=""
+R2_SECRET_KEY=""
 R2_BUCKET="belo-media"
 NEXT_PUBLIC_CDN_URL="https://cdn.belo.sn"
 ```
 
 ---
 
-## 13. Installation & Développement
+## 16. Installation & Développement
 
 ### Prérequis
 
 - Node.js ≥ 20
 - npm ≥ 10
 - Compte Neon PostgreSQL
-- (Optionnel) Compte Cloudflare R2 pour les médias
 
 ### Démarrage rapide
 
 ```bash
-# 1. Cloner et installer
 git clone https://github.com/Ahmesgroup/belo.git
 cd belo
 npm install
 
-# 2. Configurer l'environnement
+# Configurer l'environnement
 cp .env.example .env.local
-# Éditer .env.local avec vos valeurs
+# Éditer .env.local avec DATABASE_URL, DIRECT_URL, JWT_SECRET, etc.
 
-# 3. Pousser le schéma en DB
-npx prisma db push
+# Initialiser la DB (toutes les migrations)
+npx prisma migrate deploy
 
-# 4. Seeder les données de test
+# Seeder les données de test
 npm run db:seed
 
-# 5. Lancer en développement
-npm run dev
-# → http://localhost:3000
+# Lancer en développement
+npm run dev  # → http://localhost:3000
 ```
 
-### Scripts npm utiles
+### Scripts npm
 
 ```bash
-npm run dev          # Serveur de développement
+npm run dev          # Développement
 npm run build        # prisma generate + migrate deploy + next build
 npm run db:generate  # Régénère le client Prisma
-npm run db:migrate   # Nouvelle migration (dev)
-npm run db:seed      # Seeder données de test
-npm run db:studio    # Interface graphique Prisma Studio
-npm run db:reset     # Reset complet de la DB (ATTENTION: destructif)
+npm run db:migrate   # Crée une nouvelle migration (dev)
+npm run db:seed      # Seede les données de test
+npm run db:studio    # Prisma Studio → http://localhost:5555
+npm run db:reset     # ⚠️ Reset complet (destructif)
 ```
 
 ### Scripts de maintenance
 
 ```bash
-# Corriger un compte admin en production
-node scripts/fix-db.mjs
-
-# Seeder les tarifs des plans
-node scripts/seed-plans.mjs
-
-# Ajouter des photos de démonstration
-node scripts/seed-photos.mjs
+node scripts/fix-db.mjs      # Corrige les comptes admin en prod
+node scripts/seed-plans.mjs  # Seede les PlanConfig
+node scripts/seed-photos.mjs # Seede les photos via URL
 ```
 
-### Bypass OTP en développement
+### Dev sans WhatsApp
 
 ```bash
-# Dans .env.local
+# .env.local
 OTP_BYPASS=true
+# → Les OTP sont affichés dans les logs console (pas envoyés par WhatsApp)
 ```
-
-Avec ce flag, le code OTP est loggé dans la console au lieu d'être envoyé par WhatsApp.
 
 ---
 
-## 14. Déploiement Vercel
+## 17. Déploiement Vercel
 
-### Déploiement standard
+### Déploiement
 
 ```bash
-# Build + deploy production
-npm run build         # vérifier 0 erreurs TypeScript en local
-git add .
-git commit -m "feat: description"
+npm run build          # Vérifier 0 erreurs TypeScript en local
+git add . && git commit -m "feat: ..."
 git push
 npx vercel --prod
 ```
 
-### Variables d'environnement Vercel
+Le build Vercel exécute automatiquement `prisma generate && prisma migrate deploy && next build`.
 
-Toutes les variables de la section 12 doivent être configurées dans
-**Vercel Dashboard → Project → Settings → Environment Variables**.
-
-> ⚠️ Le fichier `.env.local` n'est **pas** déployé sur Vercel.
-
-### Cron Jobs Vercel
-
-Configurer dans `vercel.json` :
+### Cron Jobs — `vercel.json`
 
 ```json
 {
   "crons": [
-    {
-      "path": "/api/cron/generate-slots",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/notifications",
-      "schedule": "*/1 * * * *"
-    },
-    {
-      "path": "/api/cron/purge-logs",
-      "schedule": "0 3 * * 0"
-    }
+    { "path": "/api/cron/generate-slots",  "schedule": "0 2 * * *"    },
+    { "path": "/api/cron/notifications",   "schedule": "*/1 * * * *"  },
+    { "path": "/api/cron/purge-logs",      "schedule": "0 3 * * 0"    },
+    { "path": "/api/cron/events",          "schedule": "*/2 * * * *"  }
   ]
 }
 ```
 
-Chaque cron protégé par l'en-tête `Authorization: Bearer CRON_SECRET`.
+Chaque endpoint cron valide `Authorization: Bearer CRON_SECRET`.
 
 ### URL de production
 
@@ -1010,60 +1123,61 @@ https://belo-khaki.vercel.app
 
 ---
 
-## 15. Maintenance DB
+## 18. Maintenance DB
 
-### Connexion directe (bypass pgBouncer)
-
-```bash
-# Pour les migrations et scripts, utiliser DIRECT_URL
-node scripts/fix-db.mjs
-# Le script charge automatiquement .env.local et utilise DIRECT_URL
-```
-
-### Fix compte SUPER_ADMIN en production
+### Fix compte SUPER_ADMIN
 
 ```bash
 node scripts/fix-db.mjs
+# → Migre +352 → +221, upsert SUPER_ADMIN, purge OTP, crée staff démo
 ```
-
-Ce script :
-1. Migre le préfixe `+352661000001` (Luxembourg) → `+221661000001` (Sénégal)
-2. Upsert `661000001` en tant que `SUPER_ADMIN`
-3. Purge les logs OTP et rate-limits (débloque tous les numéros)
-4. Crée les comptes staff de démonstration
 
 ### Prisma Studio
 
 ```bash
-npm run db:studio
-# → http://localhost:5555
+npm run db:studio  # → http://localhost:5555
 ```
 
-### Migrations
+### Nouvelle migration
 
 ```bash
-# Créer une nouvelle migration
-npx prisma migrate dev --name "description_migration"
-
-# Appliquer les migrations en production (fait automatiquement par `npm run build`)
-npx prisma migrate deploy
+npx prisma migrate dev --name "nom_migration"
+npx prisma migrate deploy  # En prod (ou automatique via npm run build)
 ```
+
+### Migrations existantes
+
+| Migration | Contenu |
+|---|---|
+| `20260501_init` | Schéma complet initial |
+| `20260502_add_auditlog_ratelimit_index` | Index performance AuditLog |
+| `20260502_add_tenant_horaires` | Champ horaires JSON |
+| `20260502_add_plan_config` | Modèle PlanConfig |
+| `20260504_admin_enhancements` | PlanConfig +limits/features · SystemSetting |
+| `20260504_event_log_and_notifications` | EventLog · AdminNotification |
 
 ---
 
-## Annexe — Décisions d'architecture
+## 19. Annexe — Décisions d'architecture
 
 | Décision | Choix | Raison |
 |---|---|---|
-| Auth | OTP WhatsApp + JWT maison | Pas de NextAuth — contrôle total, adapté au marché africain (pas Google/GitHub) |
-| DB | Neon serverless | Scale-to-zero, coût minimal en phase 1 |
-| Queue notifs | Outbox pattern (PostgreSQL) | Pas de Redis en phase 1 — NotificationLog + cron worker |
-| Paiement | Multi-provider | Wave dominant au Sénégal, Orange Money, Stripe pour diaspora |
-| Anti-double-booking | `SELECT FOR UPDATE` + contrainte DB | Garantie d'atomicité au niveau base de données |
-| JWT stockage | httpOnly cookie + localStorage | Cookie pour proxy edge, localStorage pour headers API fetch |
-| i18n | Context React + JSON statique | Léger, pas de lib externe, supporte FR/EN |
+| Auth | OTP WhatsApp + JWT maison | Marché africain — pas de Google/GitHub ; contrôle total |
+| DB | Neon serverless PostgreSQL | Scale-to-zero, coût minimal phase 1 |
+| Queue notifs | Outbox pattern (NotificationLog) | Pas de Redis phase 1 — PostgreSQL fait la queue |
+| Event queue | EventLog table | Durabilité + retry sans Redis ; SELECT FOR UPDATE SKIP LOCKED |
+| Event bus | Synchrone in-process | Vercel serverless = pas de mémoire partagée entre requêtes |
+| Fraud engine | 6 signaux + auto-block | Actif sans intervention manuelle ; seuil ≥ 80 |
+| Paiement | Multi-provider | Wave dominant au Sénégal, Orange Money, Stripe diaspora |
+| Anti-double-booking | `SELECT FOR UPDATE` + contrainte DB | Atomicité garantie au niveau base |
+| JWT stockage | httpOnly cookie + localStorage | Cookie pour proxy edge, localStorage pour headers API |
+| Plans | JSON limits/features en DB | Modificables sans migration SQL depuis l'admin |
+| Settings | SystemSetting table + cache 30s | Config plateforme dynamique, cache évite une requête/req |
+| Admin stream | Polling 5s sur EventLog | SSE timeout sur Vercel free tier |
 | Proxy (edge) | `proxy.ts` (Next.js 16) | Remplace `middleware.ts` — interception avant rendu |
+| CORS | getCorsHeaders() allowlist | Pas de wildcard `*` en production |
+| i18n | Context React + JSON statique | Léger, pas de lib externe, FR/EN |
 
 ---
 
-*Documentation générée pour Belo v0.1.0 — Mise à jour : 2026*
+*Documentation générée pour Belo v0.1.0 — Mise à jour : Mai 2026*
