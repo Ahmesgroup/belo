@@ -2,10 +2,6 @@
 // app/api/tenants/route.ts
 // POST /api/tenants        → inscription nouveau salon (gérant)
 // GET  /api/tenants        → liste des salons (public, avec filtres)
-//
-// app/api/tenants/[id]/route.ts
-// GET    /api/tenants/:id  → profil public du salon
-// PATCH  /api/tenants/:id  → mise à jour profil (gérant)
 // ============================================================
 
 import "@/lib/event-handlers";
@@ -19,6 +15,8 @@ import { handleRouteError, AppErrors } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { getCorsHeaders } from "@/lib/cors";
 import { emitEvent } from "@/lib/events";
+import { geocodeAddress } from "@/services/geocode";
+import { normalizePhone } from "@/lib/phone";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
@@ -29,51 +27,55 @@ const CreateTenantSchema = z.object({
     .max(100, "Le nom est trop long"),
   phone: z
     .string()
-    .min(8, "Numéro trop court")
+    .min(5, "Numéro trop court")
     .regex(/^\+?[0-9\s\-().]+$/, "Numéro invalide"),
   whatsapp: z.string().optional(),
-  email: z.string().email("Email invalide").optional(),
-  address: z.string().min(5, "Adresse trop courte"),
-  city: z.string().min(2, "Ville requise"),
-  country: z.string().length(2).default("SN"),
-  description: z.string().max(1000).optional(),
-  category: z.enum([
-    "NAILS", "MASSAGE", "HAIR", "BARBER", "SPA",
-    "BEAUTY", "MAKEUP", "WAXING", "EYELASH", "OTHER",
-  ]).optional(),
+  email:    z.string().email("Email invalide").optional(),
+  address:  z.string().min(3, "Adresse trop courte"),
+  city:     z.string().min(2, "Ville requise"),
+  country:  z.string().length(2).default("SN"),
+  // description and category are intentionally absent — they do not exist
+  // on the Tenant model. Spreading unknown keys into prisma.create() causes
+  // a PrismaClientValidationError at runtime even though TypeScript compiles.
 });
 
-const UpdateTenantSchema = CreateTenantSchema.partial().extend({
-  facebook:    z.string().url().optional().nullable(),
-  instagram:   z.string().optional().nullable(),
-  tiktok:      z.string().optional().nullable(),
-  website:     z.string().url().optional().nullable(),
-  depositEnabled:  z.boolean().optional(),
-  depositPercent:  z.number().int().min(10).max(100).optional(),
-  customDomain:    z.string().optional().nullable(),
+const UpdateTenantSchema = z.object({
+  name:           z.string().min(2).max(100).optional(),
+  phone:          z.string().min(5).regex(/^\+?[0-9\s\-().]+$/).optional(),
+  whatsapp:       z.string().optional().nullable(),
+  email:          z.string().email().optional().nullable(),
+  address:        z.string().min(3).optional(),
+  city:           z.string().min(2).optional(),
+  country:        z.string().length(2).optional(),
+  facebook:       z.string().url().optional().nullable(),
+  instagram:      z.string().optional().nullable(),
+  tiktok:         z.string().optional().nullable(),
+  website:        z.string().url().optional().nullable(),
+  depositEnabled: z.boolean().optional(),
+  depositPercent: z.number().int().min(10).max(100).optional(),
+  customDomain:   z.string().optional().nullable(),
 });
 
 const GetTenantsSchema = z.object({
-  city:      z.string().optional(),
-  category:  z.string().optional(),
-  plan:      z.enum(["FREE", "PRO", "PREMIUM"]).optional(),
-  search:    z.string().max(100).optional(),
-  page:      z.coerce.number().int().positive().default(1),
-  pageSize:  z.coerce.number().int().min(1).max(50).default(20),
+  city:     z.string().optional(),
+  category: z.string().optional(),
+  plan:     z.enum(["FREE", "PRO", "PREMIUM"]).optional(),
+  search:   z.string().max(100).optional(),
+  page:     z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
 // ── GET /api/tenants ─────────────────────────────────────────
-// Publique — liste des salons actifs pour le listing
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const parsed = GetTenantsSchema.safeParse({
-      city:     searchParams.get("city") ?? undefined,
+      city:     searchParams.get("city")     ?? undefined,
       category: searchParams.get("category") ?? undefined,
-      plan:     searchParams.get("plan") ?? undefined,
-      search:   searchParams.get("search") ?? undefined,
-      page:     searchParams.get("page") ?? 1,
+      plan:     searchParams.get("plan")     ?? undefined,
+      search:   searchParams.get("search")   ?? undefined,
+      page:     searchParams.get("page")     ?? 1,
       pageSize: searchParams.get("pageSize") ?? 20,
     });
 
@@ -85,10 +87,10 @@ export async function GET(req: NextRequest) {
 
     const where = {
       status: "ACTIVE" as const,
-      ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}),
-      ...(plan ? { plan: plan as any } : {}),
+      ...(city     ? { city:     { contains: city,   mode: "insensitive" as const } } : {}),
+      ...(plan     ? { plan:     plan as "FREE" | "PRO" | "PREMIUM" }                 : {}),
       ...(category ? { services: { some: { category: category as string, isActive: true } } } : {}),
-      ...(search ? {
+      ...(search   ? {
         OR: [
           { name:    { contains: search, mode: "insensitive" as const } },
           { address: { contains: search, mode: "insensitive" as const } },
@@ -96,36 +98,18 @@ export async function GET(req: NextRequest) {
       } : {}),
     };
 
-    // Trier par plan (PREMIUM en premier, puis PRO, puis FREE)
-    // puis par note moyenne
-    const planOrder = { PREMIUM: 0, PRO: 1, FREE: 2 };
-
     const [tenants, total] = await Promise.all([
       prisma.tenant.findMany({
         where,
         select: {
-          id:          true,
-          name:        true,
-          slug:        true,
-          city:        true,
-          country:     true,
-          address:     true,
-          photos:      true,
-          coverUrl:    true,
-          plan:        true,
-          _count: {
-            select: {
-              bookings: true,
-            },
-          },
+          id: true, name: true, slug: true,
+          city: true, country: true, address: true,
+          photos: true, coverUrl: true, plan: true,
+          _count: { select: { bookings: true } },
         },
-        skip:  (page - 1) * pageSize,
-        take:  pageSize,
-        orderBy: [
-          // PREMIUM d'abord — position TOP listing
-          { plan: "desc" },
-          { createdAt: "desc" },
-        ],
+        skip:    (page - 1) * pageSize,
+        take:    pageSize,
+        orderBy: [{ plan: "desc" }, { createdAt: "desc" }],
       }),
       prisma.tenant.count({ where }),
     ]);
@@ -133,10 +117,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       data: {
         tenants,
-        pagination: {
-          page, pageSize, total,
-          totalPages: Math.ceil(total / pageSize),
-        },
+        pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
       },
     }, {
       headers: {
@@ -150,9 +131,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST /api/tenants ─────────────────────────────────────────
-// Inscription d'un nouveau salon
-// Le gérant doit être connecté (USER existant avec rôle CLIENT)
-// → crée le Tenant + upgrade le User en OWNER
+// Creates a new salon and atomically upgrades the user to OWNER.
 
 export async function POST(req: NextRequest) {
   try {
@@ -162,11 +141,10 @@ export async function POST(req: NextRequest) {
     const auth = await withAuth(req);
     if (!auth.ok) return NextResponse.json(AppErrors.UNAUTHORIZED().toJSON(), { status: 401 });
 
-    // Un user ne peut avoir qu'un seul salon
     if (auth.tenantId) {
       return NextResponse.json(
         { error: { code: "ALREADY_HAS_SALON", message: "Vous avez déjà un salon enregistré." } },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -178,62 +156,75 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(zodErrorResponse(parsed.error), { status: 422 });
     }
 
-    // Générer le slug unique
+    // Resolve default dial code from country for E.164 normalisation
+    const COUNTRY_DIAL: Record<string, string> = {
+      SN: "221", CI: "225", ML: "223", GN: "224", BF: "226",
+      CM: "237", TG: "228", BJ: "229", MA: "212", DZ: "213",
+      TN: "216", EG: "20",  GH: "233", NG: "234", KE: "254",
+      FR: "33",  BE: "32",  LU: "352", CH: "41",  DE: "49",
+      GB: "44",  US: "1",   CA: "1",
+    };
+    const dialDefault = COUNTRY_DIAL[parsed.data.country] ?? "221";
+    const phoneE164   = normalizePhone(parsed.data.phone, dialDefault);
+
+    // Geocode — lat/lng must never be null for ranking SQL queries
+    const geo = await geocodeAddress(parsed.data.address, parsed.data.city);
+
+    // Build unique slug
     const baseSlug = parsed.data.name
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[̀-ͯ]/g, "")
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+      .replace(/^-+|-+$/g, "");
 
-    let slug = baseSlug;
+    let slug    = baseSlug;
     let attempt = 0;
     while (await prisma.tenant.findUnique({ where: { slug } })) {
-      attempt++;
-      slug = `${baseSlug}-${attempt}`;
+      slug = `${baseSlug}-${++attempt}`;
     }
 
-    // Transaction : créer Tenant + upgrader User en OWNER
+    // Atomic: create Tenant + upgrade User to OWNER.
+    // Only map Tenant-model columns explicitly — spreading parsed.data would
+    // include description/category which don't exist on Tenant and cause a
+    // PrismaClientValidationError (not caught as P2002/P2025, → silent 500).
     const { tenant } = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
-          ...parsed.data,
+          name:     parsed.data.name,
           slug,
-          status: "PENDING", // validation admin requise
-          users: {
-            connect: { id: auth.userId },
-          },
+          phone:    phoneE164,
+          whatsapp: parsed.data.whatsapp ?? null,
+          email:    parsed.data.email    ?? null,
+          address:  parsed.data.address,
+          city:     parsed.data.city,
+          country:  parsed.data.country,
+          lat:      geo.lat,
+          lng:      geo.lng,
+          status:   "PENDING",
+          users:    { connect: { id: auth.userId } },
         },
-        select: {
-          id:   true,
-          name: true,
-          slug: true,
-          plan: true,
-          status: true,
-        },
+        select: { id: true, name: true, slug: true, plan: true, status: true },
       });
 
-      // Upgrader le User CLIENT → OWNER
       await tx.user.update({
         where: { id: auth.userId },
         data:  { role: "OWNER", tenantId: tenant.id },
       });
 
-      // AuditLog
       await tx.auditLog.create({
         data: {
           action:   "tenant.created",
           entity:   "Tenant",
           entityId: tenant.id,
           actorId:  auth.userId,
-          newValue: { name: tenant.name, slug: tenant.slug },
+          newValue: { name: tenant.name, slug: tenant.slug, geoSource: geo.source },
         },
       });
 
       return { tenant };
     });
 
-    // tenant.created → triggers AdminNotification + audit log (non-blocking)
     emitEvent("tenant.created", {
       tenantId:   tenant.id,
       tenantName: tenant.name,
@@ -241,7 +232,7 @@ export async function POST(req: NextRequest) {
       plan:       tenant.plan,
     }).catch(() => {});
 
-    // Issue fresh JWT so the client can update localStorage immediately
+    // Fresh JWT with new role so the client can update localStorage immediately
     const accessToken = await signJWT({
       sub:      auth.userId,
       role:     "OWNER",
@@ -249,13 +240,11 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({
-      data: {
-        tenant,
-        accessToken,
-        user: { role: "OWNER", tenantId: tenant.id },
-      },
+      data: { tenant, accessToken, user: { role: "OWNER", tenantId: tenant.id } },
     }, { status: 201 });
+
   } catch (err) {
+    console.error("[POST /api/tenants]", err);
     return handleRouteError(err);
   }
 }
@@ -275,35 +264,22 @@ async function GET_ONE(
     const tenant = await prisma.tenant.findFirst({
       where: {
         OR: [
-          { id: params.id },
-          { slug: params.id }, // accepter id ou slug
+          { id:   params.id },
+          { slug: params.id },
         ],
         status: "ACTIVE",
       },
       select: {
-        id:             true,
-        name:           true,
-        slug:           true,
-        phone:          true,
-        whatsapp:       true,
-        email:          true,
-        address:        true,
-        city:           true,
-        country:        true,
-        photos:         true,
-        plan:           true,
-        socials:        true,
-        depositEnabled: true,
-        depositPercent: true,
+        id: true, name: true, slug: true,
+        phone: true, whatsapp: true, email: true,
+        address: true, city: true, country: true,
+        photos: true, plan: true, socials: true,
+        depositEnabled: true, depositPercent: true,
         services: {
           where:   { isActive: true },
-          select: {
-            id:          true,
-            name:        true,
-            category:    true,
-            priceCents:  true,
-            durationMin: true,
-            photos:      true,
+          select:  {
+            id: true, name: true, category: true,
+            priceCents: true, durationMin: true, photos: true,
           },
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         },
@@ -317,7 +293,7 @@ async function GET_ONE(
 
     return NextResponse.json(
       { data: tenant },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" } }
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" } },
     );
   } catch (err) {
     return handleRouteError(err);
@@ -329,11 +305,10 @@ async function PATCH_ONE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const auth = await withAuth(req);
-    const roleCheck = withRole(auth, ["OWNER", "STAFF", "ADMIN", "SUPER_ADMIN"]);
+    const auth       = await withAuth(req);
+    const roleCheck  = withRole(auth, ["OWNER", "STAFF", "ADMIN", "SUPER_ADMIN"]);
     if (!roleCheck.ok) return roleCheck.response;
 
-    // Vérifier l'accès cross-tenant
     const tenantCheck = withTenant(auth, params.id);
     if (!tenantCheck.ok) return tenantCheck.response;
 
@@ -345,12 +320,10 @@ async function PATCH_ONE(
       return NextResponse.json(zodErrorResponse(parsed.error), { status: 422 });
     }
 
-    // Vérifier que les réseaux sociaux ne sont activés qu'en PRO+
     const tenant = await prisma.tenant.findUnique({
       where:  { id: params.id },
       select: { plan: true },
     });
-
     if (!tenant) return NextResponse.json(AppErrors.TENANT_NOT_FOUND().toJSON(), { status: 404 });
 
     const isFree = tenant.plan === "FREE";
@@ -358,16 +331,11 @@ async function PATCH_ONE(
 
     const updateData: Record<string, unknown> = { ...rest };
 
-    // Réseaux sociaux = PRO+
     if (!isFree) {
-      if (facebook !== undefined)  updateData.facebook  = facebook;
+      if (facebook  !== undefined) updateData.facebook  = facebook;
       if (instagram !== undefined) updateData.instagram = instagram;
-      if (tiktok !== undefined)    updateData.tiktok    = tiktok;
-      if (website !== undefined)   updateData.website   = website;
-    }
-
-    // Acompte = PRO+
-    if (!isFree) {
+      if (tiktok    !== undefined) updateData.tiktok    = tiktok;
+      if (website   !== undefined) updateData.website   = website;
       if (depositEnabled !== undefined) updateData.depositEnabled = depositEnabled;
       if (depositPercent !== undefined) updateData.depositPercent = depositPercent;
     }
@@ -375,13 +343,7 @@ async function PATCH_ONE(
     const updated = await prisma.tenant.update({
       where:  { id: params.id },
       data:   updateData as any,
-      select: {
-        id:          true,
-        name:        true,
-        slug:        true,
-        plan:        true,
-        updatedAt:   true,
-      },
+      select: { id: true, name: true, slug: true, plan: true, updatedAt: true },
     });
 
     return NextResponse.json({ data: updated });

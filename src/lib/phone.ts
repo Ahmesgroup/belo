@@ -270,7 +270,11 @@ export function detectDefaultCountry(): Country {
 // ── E.164 utilities ───────────────────────────────────────────
 
 export function toE164(dial: string, local: string): string {
-  return `+${dial}${local.replace(/\D/g, "")}`;
+  const digits = local.replace(/\D/g, "");
+  // Guard against double indicatif: if digits already start with the dial
+  // code (user pasted "+221 77..." → "22177...") don't prepend it again.
+  if (digits.startsWith(dial) && digits.length > dial.length) return `+${digits}`;
+  return `+${dial}${digits}`;
 }
 
 export function isValidLocalNumber(local: string, country: Country): boolean {

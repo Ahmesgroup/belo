@@ -79,11 +79,13 @@ export function PhoneInput({
     if (open) setTimeout(() => searchRef.current?.focus(), 50);
   }, [open]);
 
+  // Strip leading + from search so "+352" matches dial "352"
+  const dialSearch = search.replace(/^\+/, "");
   const filtered = COUNTRIES.filter(c =>
     !search ||
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.nameFr.toLowerCase().includes(search.toLowerCase()) ||
-    c.dial.includes(search) ||
+    c.dial.includes(dialSearch) ||
     c.iso.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -148,7 +150,7 @@ export function PhoneInput({
           disabled={disabled}
           autoComplete="tel-national"
           aria-label="Numéro de téléphone"
-          aria-invalid={showErr}
+          aria-invalid={showErr ? "true" : "false"}
           aria-describedby={showErr ? "phone-error" : undefined}
           className="flex-1 px-4 py-4 bg-transparent outline-none text-base text-text placeholder:text-text3 font-sans min-w-0"
         />
@@ -224,7 +226,7 @@ export function PhoneInput({
                     key={c.iso}
                     id={c.iso}
                     role="option"
-                    aria-selected={selected ? "true" : "false"}
+                    aria-selected={selected}
                     tabIndex={0}
                     onClick={() => selectCountry(c)}
                     onKeyDown={e => (e.key === "Enter" || e.key === " ") && selectCountry(c)}
