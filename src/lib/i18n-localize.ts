@@ -9,7 +9,14 @@
 //   getLocalized(city.name, "fr")  → "Dakar"
 // ============================================================
 
-export type LocalizedField = { fr: string; en: string } | string | null | undefined;
+// Prisma returns Json fields as `unknown`; after parsing they are objects.
+// Accept the broad Record shape so callers don't need to cast.
+export type LocalizedField =
+  | { fr: string; en: string }
+  | Record<string, string>
+  | string
+  | null
+  | undefined;
 
 /**
  * Extracts the localised string from a JSON bilingual field.
@@ -24,5 +31,6 @@ export function getLocalized(
   if (typeof field === "string") return field;
 
   const l = lang === "en" ? "en" : "fr";
-  return (field as any)[l] ?? (field as any).fr ?? fallback;
+  const obj = field as Record<string, string>;
+  return obj[l] ?? obj["fr"] ?? fallback;
 }

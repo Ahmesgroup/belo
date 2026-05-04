@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 
-type Consent = {
-  essential:  true;
-  analytics:  boolean;
-  marketing:  boolean;
-};
+interface Consent {
+  essential: true;
+  analytics: boolean;
+  marketing: boolean;
+  savedAt:   number;
+}
 
-const STORAGE_KEY = "belo_cookie_consent";
+const KEY = "belo_cookie_consent";
 
 export default function CookieBanner() {
   const [visible,   setVisible]   = useState(false);
@@ -18,61 +19,93 @@ export default function CookieBanner() {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (!saved) setVisible(true);
+      const raw = localStorage.getItem(KEY);
+      if (!raw) { setVisible(true); return; }
+      const saved = JSON.parse(raw) as Consent;
+      // Re-show if consent is older than 13 months (GDPR requirement)
+      const expired = Date.now() - saved.savedAt > 13 * 30 * 24 * 60 * 60 * 1000;
+      if (expired) { setVisible(true); localStorage.removeItem(KEY); }
     } catch {
       setVisible(true);
     }
   }, []);
 
-  function save(consent: Consent) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(consent));
-    } catch { /* ignore */ }
+  function save(c: Omit<Consent, "savedAt">) {
+    const full: Consent = { ...c, savedAt: Date.now() };
+    localStorage.setItem(KEY, JSON.stringify(full));
+    // Also set a non-httpOnly cookie readable by the server for SSR consent
+    document.cookie = `belo_consent=${encodeURIComponent(JSON.stringify({ analytics: c.analytics, marketing: c.marketing }))};path=/;max-age=${13 * 30 * 24 * 3600};SameSite=Lax`;
     setVisible(false);
-  }
-
-  function acceptAll() {
-    save({ essential: true, analytics: true, marketing: true });
-  }
-
-  function rejectAll() {
-    save({ essential: true, analytics: false, marketing: false });
-  }
-
-  function saveCustom() {
-    save({ essential: true, analytics, marketing });
   }
 
   if (!visible) return null;
 
   return (
-    <div role="dialog" aria-label="Préférences cookies" style={{
-      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9000,
-      background: "var(--card)", borderTop: "1px solid var(--border2)",
-      padding: "16px 20px", boxShadow: "0 -8px 32px rgba(0,0,0,.3)",
-    }}>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 260 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 5 }}>🍪 Ce site utilise des cookies</div>
-            <p style={{ fontSize: 11, color: "var(--text2)", lineHeight: 1.5, margin: 0 }}>
-              Nous utilisons des cookies essentiels pour le fonctionnement du site. Avec votre accord, nous utilisons des cookies analytiques pour améliorer notre service.{" "}
-              <a href="/confidentialite" style={{ color: "var(--g2)", textDecoration: "none" }}>En savoir plus</a>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Préférences de cookies"
+      className="
+        fixed bottom-0 left-0 right-0 z-[9999]
+        bg-card border-t border-border2 shadow-[0_-8px_40px_rgba(0,0,0,.18)]
+        animate-[slideUp_.3s_ease]
+      "
+    >
+      <div className="max-w-5xl mx-auto px-5 py-5">
+        <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
+
+          {/* Text */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-text mb-1">🍪 Ce site utilise des cookies</p>
+            <p className="text-xs text-text3 leading-relaxed">
+              Les cookies essentiels assurent le fonctionnement du site.{" "}
+              {expanded ? null : (
+                <a href="/confidentialite" className="text-g2 hover:underline">En savoir plus</a>
+              )}
             </p>
+
             {expanded && (
-              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="mt-4 space-y-3 border-t border-border pt-4">
                 {[
-                  { key: "essential", label: "Essentiels", desc: "Authentification, panier, sécurité. Toujours actifs.", value: true,      disabled: true, onChange: () => {} },
-                  { key: "analytics", label: "Analytiques", desc: "Mesure d'audience anonyme pour améliorer le service.", value: analytics, disabled: false, onChange: (v: boolean) => setAnalytics(v) },
-                  { key: "marketing", label: "Marketing",   desc: "Publicités personnalisées sur nos partenaires.",        value: marketing, disabled: false, onChange: (v: boolean) => setMarketing(v) },
+                  {
+                    key:      "essential",
+                    label:    "Essentiels",
+                    desc:     "Authentification, sécurité, session. Toujours actifs.",
+                    checked:  true,
+                    disabled: true,
+                    onChange: () => {},
+                  },
+                  {
+                    key:      "analytics",
+                    label:    "Analytiques",
+                    desc:     "Mesure d'audience anonyme (aucune donnée personnelle).",
+                    checked:  analytics,
+                    disabled: false,
+                    onChange: setAnalytics,
+                  },
+                  {
+                    key:      "marketing",
+                    label:    "Marketing",
+                    desc:     "Publicités personnalisées sur nos partenaires.",
+                    checked:  marketing,
+                    disabled: false,
+                    onChange: setMarketing,
+                  },
                 ].map(item => (
-                  <label key={item.key} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: item.disabled ? "default" : "pointer" }}>
-                    <input type="checkbox" checked={item.value} disabled={item.disabled} onChange={e => item.onChange(e.target.checked)}
-                      style={{ marginTop: 2, accentColor: "var(--g2)", flexShrink: 0 }} />
+                  <label key={item.key} className={`flex items-start gap-3 ${item.disabled ? "cursor-default" : "cursor-pointer"}`}>
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      disabled={item.disabled}
+                      onChange={e => item.onChange(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 accent-g1 shrink-0"
+                    />
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>{item.label} {item.disabled && <span style={{ fontSize: 10, color: "var(--text3)" }}>(requis)</span>}</div>
-                      <div style={{ fontSize: 11, color: "var(--text3)" }}>{item.desc}</div>
+                      <span className="text-sm font-semibold text-text">
+                        {item.label}
+                        {item.disabled && <span className="ml-1 text-[10px] text-text3">(requis)</span>}
+                      </span>
+                      <p className="text-xs text-text3">{item.desc}</p>
                     </div>
                   </label>
                 ))}
@@ -80,28 +113,46 @@ export default function CookieBanner() {
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap", alignItems: "center" }}>
-            <button type="button" onClick={() => setExpanded(!expanded)}
-              style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border2)", background: "transparent", color: "var(--text3)", fontSize: 11, cursor: "pointer" }}>
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="px-4 py-2 rounded-xl border border-border2 text-text3 text-xs font-semibold hover:bg-card2 transition-colors"
+            >
               {expanded ? "Masquer" : "Personnaliser"}
             </button>
+
             {expanded && (
-              <button type="button" onClick={saveCustom}
-                style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border2)", background: "var(--card2)", color: "var(--text2)", fontSize: 11, cursor: "pointer" }}>
+              <button
+                type="button"
+                onClick={() => save({ essential: true, analytics, marketing })}
+                className="px-4 py-2 rounded-xl border border-border2 bg-card2 text-text2 text-xs font-semibold hover:bg-card transition-colors"
+              >
                 Enregistrer
               </button>
             )}
-            <button type="button" onClick={rejectAll}
-              style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border2)", background: "transparent", color: "var(--text3)", fontSize: 11, cursor: "pointer" }}>
+
+            <button
+              type="button"
+              onClick={() => save({ essential: true, analytics: false, marketing: false })}
+              className="px-4 py-2 rounded-xl border border-border2 text-text3 text-xs font-semibold hover:bg-card2 transition-colors"
+            >
               Refuser
             </button>
-            <button type="button" onClick={acceptAll}
-              style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "var(--g)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+
+            <button
+              type="button"
+              onClick={() => save({ essential: true, analytics: true, marketing: true })}
+              className="px-5 py-2 rounded-xl bg-g1 text-white text-xs font-bold hover:bg-g3 transition-colors shadow-green"
+            >
               Tout accepter
             </button>
           </div>
         </div>
       </div>
+
+      <style>{`@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
     </div>
   );
 }

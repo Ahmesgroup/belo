@@ -55,7 +55,7 @@ async function main() {
 
   // 4. Unblock users if the schema has a blockedUntil field
   try {
-    await (prisma.user as any).updateMany({
+    await prisma.user.updateMany({
       where: { blockedUntil: { not: null } },
       data:  { blockedUntil: null },
     });
@@ -100,3 +100,4 @@ async function main() {
 main()
   .catch(e => { console.error("❌", e.message); process.exit(1); })
   .finally(() => prisma.$disconnect());
+

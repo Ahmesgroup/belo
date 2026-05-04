@@ -138,6 +138,10 @@ model Tenant {
   waveNumber        String?
   orangeMoneyNumber String?
   bankAccount       Json?
+
+  // Stripe Connect (marketplace payout)
+  stripeAccountId           String?
+  stripeOnboardingComplete  Boolean  @default(false)
   // { bank, iban, accountName }
 
   // Plan limits (dénormalisé pour perf — évite JOIN)
@@ -158,6 +162,7 @@ model Tenant {
   fraudAlerts  FraudAlert[]
   auditLogs    AuditLog[]
   payoutInfos  TenantPayout[]
+  favorites    Favorite[]
 
   // INDEXES (ciblés — coût minimal)
   @@index([status])           // filtrer actifs/bloqués
@@ -203,6 +208,7 @@ model User {
   bookings    Booking[]
   reviews     Review[]
   auditLogs   AuditLog[]
+  favorites   Favorite[]
 
   // INDEXES
   @@index([tenantId])         // lister staff d'un salon
@@ -303,6 +309,10 @@ model Booking {
   clientNote       String?
   staffNote        String?       // visible gérant uniquement
   cancelReason     String?
+
+  // Stripe marketplace
+  stripePaymentIntentId String?
+  platformFeeCents      Int       @default(0)  // commission Belo
 
   // Timestamps métier
   confirmedAt      DateTime?
@@ -461,6 +471,22 @@ model AuditLog {
 // ============================================================
 // COUNTRY + CITY — geo dataset
 // ============================================================
+
+// ============================================================
+// FAVORITE — wishlist client
+// ============================================================
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, tenantId])
+  @@index([userId])
+}
 
 model Country {
   code      String  @id           // ISO 3166-1 alpha-2: "SN", "FR", …
