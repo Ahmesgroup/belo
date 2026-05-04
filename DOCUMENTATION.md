@@ -1,8 +1,8 @@
 # Belo — Documentation Technique
 
 > Marketplace SaaS multi-tenant de réservation de salons de beauté.
-> Marché : Afrique + Europe. Déployée sur Vercel, base de données Neon PostgreSQL.
-> Production URL : **https://belo-khaki.vercel.app**
+> Marchés : Afrique + Europe. Déployée sur Vercel, base de données Neon PostgreSQL.
+> Production : **https://belo-khaki.vercel.app**
 
 ---
 
@@ -12,40 +12,44 @@
 2. [Stack technique](#2-stack-technique)
 3. [Architecture globale](#3-architecture-globale)
 4. [Arborescence du projet](#4-arborescence-du-projet)
-5. [Modèle de données](#5-modèle-de-données)
+5. [Modèle de données — 21 modèles](#5-modèle-de-données--21-modèles)
 6. [Authentification & Sécurité](#6-authentification--sécurité)
 7. [Système d'événements](#7-système-dévénements)
-8. [Fraud Engine](#8-fraud-engine)
-9. [Admin Control Panel](#9-admin-control-panel)
-10. [i18n — Routing multilingue & SEO](#10-i18n--routing-multilingue--seo)
-11. [Géolocalisation & Dataset pays/villes](#11-géolocalisation--dataset-paysvilles)
-12. [RGPD & Cookie Consent](#12-rgpd--cookie-consent)
-13. [Flux de navigation](#13-flux-de-navigation)
-14. [API Routes — référence complète](#14-api-routes--référence-complète)
-15. [Contrôle d'accès par rôle (RBAC)](#15-contrôle-daccès-par-rôle-rbac)
-16. [PWA — Bouton d'installation](#16-pwa--bouton-dinstallation)
-17. [Variables d'environnement](#17-variables-denvironnement)
-18. [Installation & Développement](#18-installation--développement)
-19. [Déploiement Vercel](#19-déploiement-vercel)
-20. [Maintenance DB](#20-maintenance-db)
-21. [Annexe — Décisions d'architecture](#21-annexe--décisions-darchitecture)
+8. [Ranking Engine](#8-ranking-engine)
+9. [Trending Engine](#9-trending-engine)
+10. [Ads Engine](#10-ads-engine)
+11. [Fraud Engine](#11-fraud-engine)
+12. [Admin Control Panel](#12-admin-control-panel)
+13. [i18n — Routing multilingue & SEO](#13-i18n--routing-multilingue--seo)
+14. [Géolocalisation & Dataset pays/villes](#14-géolocalisation--dataset-paysvilles)
+15. [RGPD & Cookie Consent](#15-rgpd--cookie-consent)
+16. [Stripe Connect — Marketplace Payments](#16-stripe-connect--marketplace-payments)
+17. [Flux de navigation](#17-flux-de-navigation)
+18. [API Routes — référence complète](#18-api-routes--référence-complète)
+19. [Contrôle d'accès par rôle (RBAC)](#19-contrôle-daccès-par-rôle-rbac)
+20. [PWA — Bouton d'installation](#20-pwa--bouton-dinstallation)
+21. [Variables d'environnement](#21-variables-denvironnement)
+22. [Installation & Développement](#22-installation--développement)
+23. [Déploiement Vercel](#23-déploiement-vercel)
+24. [Maintenance DB](#24-maintenance-db)
+25. [Annexe — Décisions d'architecture](#25-annexe--décisions-darchitecture)
 
 ---
 
 ## 1. Vue d'ensemble
 
-**Belo** est une marketplace SaaS de réservation en ligne pour les salons de coiffure, beauté et bien-être. Objectif : niveau Fresha / Treatwell pour l'Afrique et la diaspora européenne.
+**Belo** est une marketplace SaaS de réservation de salons de beauté. Positionnement : Google + Wolt + Fresha dans un seul produit.
 
 | Aspect | Détail |
 |---|---|
 | Modèle | Marketplace multi-tenant (1 salon = 1 tenant) |
 | Marchés | Sénégal · Côte d'Ivoire · Maroc · France · Belgique · Luxembourg |
-| Paiements | Wave · Orange Money · Stripe · Paystack · MTN Money |
+| Paiements | Wave · Orange Money · Stripe Connect (marketplace) |
 | Notifications | WhatsApp (outbox pattern) |
-| Langues | Français · Anglais (routing `/fr` / `/en`) |
+| Langues | Français · Anglais (`/fr/*` · `/en/*`) |
 | Plans | FREE · PRO · PREMIUM |
-| Admin | Control Panel 7 vues · Fraud Engine · Event System |
-| SEO | Pages serveur par ville : `/fr/salons/dakar`, `/en/salons/paris` |
+| Ranking | Geo + quality metrics + trending + ad boost |
+| SEO | SSG par ville/catégorie : `/fr/salons/dakar/coiffure` |
 
 ---
 
@@ -53,18 +57,18 @@
 
 | Couche | Technologie | Version |
 |---|---|---|
-| Framework | Next.js (App Router) | 16.2.4 |
+| Framework | Next.js App Router | 16.2.4 |
 | Runtime | React | 18 |
-| Langage | TypeScript | 5 |
+| Langage | TypeScript strict | 5 |
 | ORM | Prisma | 5.13 |
-| Base de données | PostgreSQL (Neon serverless) | — |
+| Base de données | PostgreSQL Neon serverless | — |
 | Auth JWT | jose | 5.2 |
 | Validation | Zod | 3.23 |
 | CSS | Tailwind CSS + CSS variables (light/dark) | 3.4 |
 | Déploiement | Vercel | — |
-| Stockage médias | Cloudflare R2 (compatible S3) | — |
+| Stockage médias | Cloudflare R2 | — |
 
-> **Pas de NextAuth, pas de Redis.** JWT maison (OTP WhatsApp), file d'événements via PostgreSQL (outbox pattern).
+> **Pas de NextAuth, pas de Redis.** JWT maison (OTP WhatsApp), event queue via PostgreSQL EventLog.
 
 ---
 
@@ -73,74 +77,53 @@
 ```mermaid
 graph TB
     subgraph Client["Navigateur / PWA"]
-        UI[React App<br/>Next.js 16 App Router]
-        LS[(localStorage<br/>belo_token · belo_user · belo_lang)]
+        UI[React App · Next.js 16]
+        LS[(localStorage<br/>token · user · lang · consent)]
     end
 
-    subgraph Edge["Edge – Vercel / proxy.ts"]
-        PX[proxy.ts<br/>JWT verify · RBAC<br/>Language detection<br/>/admin /dashboard /profil]
+    subgraph Edge["Edge — proxy.ts"]
+        PX[JWT verify · RBAC<br/>Lang detection → /fr /en]
     end
 
-    subgraph LangRoutes["Routes localisées SSG/ISR"]
-        FR[/fr — Landing FR]
-        EN[/en — Landing EN]
-        FRS[/fr/salons]
-        FRC[/fr/salons/dakar]
+    subgraph SSG["SSG / ISR Pages"]
+        LP[/fr /en — Landing 2min]
+        FS[/fr/for-salons — B2B 1h]
+        PL[/fr/plans — Tarifs 5min]
+        SC[/fr/salons/dakar/coiffure — 10min]
     end
 
-    subgraph API["API Routes – Vercel Functions"]
-        AUTH[/api/auth]
+    subgraph API["API Routes"]
+        SEARCH[/api/tenants/search<br/>Geo + Ranking SQL]
         BOOK[/api/bookings]
-        TEN[/api/tenants]
+        PAY[/api/payments + /api/stripe/*]
+        FAV[/api/favorites]
         ADMIN[/api/admin/*]
-        PAY[/api/payments]
         CRON[/api/cron/*]
     end
 
     subgraph EventSystem["Event System"]
-        EB[events.ts<br/>emitEvent + EventLog]
+        EB[events.ts · emitEvent]
+        EL[(EventLog DB — retry)]
         EH[event-handlers.ts]
     end
 
     subgraph Services["Business Logic"]
-        AS[auth.service]
-        BS[booking.service]
-        FS[fraud.service]
-        PS[plan.service]
+        RS[ranking.service.ts]
+        TS[trending.service.ts]
+        FS2[fraud.service.ts]
+        BS[booking.service.ts]
     end
 
-    subgraph DB["Neon PostgreSQL — 16 modèles"]
+    subgraph DB["Neon PostgreSQL — 21 modèles"]
         PRI[(Prisma ORM)]
     end
 
-    UI -->|httpOnly cookie + Bearer| Edge
-    Edge --> LangRoutes
-    Edge --> API
-    API --> Services
-    API --> EB
-    EB --> EH --> PRI
-    Services --> PRI
-    LangRoutes -->|direct Prisma| PRI
-```
-
-### Flux d'un événement
-
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant emitEvent
-    participant EventLog
-    participant Handlers
-    participant AuditLog
-    participant FraudEngine
-    participant AdminNotif
-
-    Caller->>emitEvent: emitEvent("tenant.blocked", payload)
-    emitEvent-->>EventLog: INSERT pending (non-bloquant)
-    emitEvent->>Handlers: dispatch synchrone
-    Handlers->>AuditLog: createAuditLog()
-    Handlers->>FraudEngine: runFraudCheck() si booking.cancelled
-    Handlers->>AdminNotif: INSERT si tenant.created / fraud≥60
+    UI --> Edge --> API
+    UI --> SSG --> PRI
+    API --> Services --> PRI
+    API --> EB --> EL
+    EB --> EH --> TS --> PRI
+    EH --> FS2 --> PRI
 ```
 
 ---
@@ -150,256 +133,205 @@ sequenceDiagram
 ```
 belo/
 ├── src/
-│   ├── proxy.ts                       # Edge proxy – RBAC + lang detection (Next.js 16)
-│   │
+│   ├── proxy.ts                     # Edge RBAC + lang detection (Next.js 16)
 │   ├── app/
-│   │   ├── layout.tsx                 # Root layout + ThemeInit + LangProvider + CookieBanner
-│   │   ├── globals.css                # Design tokens CSS (light=:root, dark=[data-theme=dark])
-│   │   ├── sitemap.ts                 # Sitemap multilingue /fr/* + /en/*
+│   │   ├── layout.tsx               # Root + ThemeInit + LangProvider + CookieBanner
+│   │   ├── globals.css              # CSS variables light/dark
+│   │   ├── sitemap.ts               # Sitemap multilingue /fr/* /en/*
 │   │   │
-│   │   ├── [lang]/                    # Routes publiques SEO (SSG/ISR)
-│   │   │   ├── layout.tsx             # generateMetadata hreflang + LangSync + validation
-│   │   │   ├── page.tsx               # Landing /fr /en — direct Prisma (ISR 2min)
+│   │   ├── [lang]/                  # Routes publiques SEO (SSG/ISR)
+│   │   │   ├── layout.tsx           # generateMetadata hreflang + canonical + LangSync
+│   │   │   ├── page.tsx             # Landing — Prisma direct, ISR 2min, Tailwind
+│   │   │   ├── for-salons/page.tsx  # B2B sales — 8 sections, ISR 1h
+│   │   │   ├── plans/
+│   │   │   │   ├── page.tsx         # Server wrapper + generateMetadata
+│   │   │   │   └── PlansClient.tsx  # Toggle FR/EN + prix live
 │   │   │   └── salons/
-│   │   │       ├── page.tsx           # /fr/salons — listing (ISR 60s)
-│   │   │       └── [city]/
-│   │   │           └── page.tsx       # /fr/salons/dakar — SEO ville (ISR 5min)
+│   │   │       ├── page.tsx         # /[lang]/salons — listing Prisma direct
+│   │   │       ├── [city]/
+│   │   │       │   ├── page.tsx     # /[lang]/salons/dakar — ISR 5min
+│   │   │       │   └── [category]/
+│   │   │       │       └── page.tsx # /fr/salons/dakar/coiffure — ISR 10min
 │   │   │
-│   │   ├── (public)/                  # Routes publiques legacy (backward compat)
-│   │   │   ├── page.tsx               # redirect → /fr
-│   │   │   ├── login/page.tsx         # Login OTP + sélecteur pays
-│   │   │   ├── booking/[slug]/page.tsx# Réservation 4 étapes (use() params Next.js 16)
-│   │   │   ├── salons/page.tsx        # /salons (garde pour compat)
-│   │   │   ├── profil/page.tsx        # Profil client
-│   │   │   ├── plans/page.tsx         # Tarifs
-│   │   │   └── pour-les-salons/       # Page commerciale gérants
+│   │   ├── (public)/               # Routes legacy (redirects → [lang])
+│   │   │   ├── page.tsx            # redirect → /fr
+│   │   │   ├── login/page.tsx      # OTP + PhoneInput sélecteur pays
+│   │   │   ├── booking/[slug]/     # Réservation 4 étapes (use() params)
+│   │   │   ├── plans/page.tsx      # redirect → /fr/plans
+│   │   │   ├── pour-les-salons/    # redirect → /fr/for-salons
+│   │   │   └── profil/page.tsx     # Profil client
 │   │   │
-│   │   ├── dashboard/                 # Espace gérant (OWNER · STAFF · ADMIN)
-│   │   │   ├── layout.tsx             # Auth guard + notif badge PENDING
-│   │   │   ├── page.tsx               # KPIs + quota
-│   │   │   ├── bookings/page.tsx      # Accept/Refuse · toast · pulseSoft
-│   │   │   ├── services/page.tsx
-│   │   │   ├── horaires/page.tsx
-│   │   │   ├── profil/page.tsx
-│   │   │   └── equipe/page.tsx        # Staff (PREMIUM)
+│   │   ├── dashboard/              # Espace gérant (OWNER · STAFF · ADMIN)
+│   │   │   ├── layout.tsx          # Auth guard + notif badge PENDING
+│   │   │   ├── page.tsx            # KPIs + quota
+│   │   │   ├── bookings/page.tsx   # Accept/Refuse · toast · pulseSoft
+│   │   │   ├── services/ horaires/ profil/ equipe/
+│   │   │   └── stripe/             # Onboarding Stripe Connect
 │   │   │
-│   │   ├── admin/page.tsx             # Control Panel (SUPER_ADMIN)
-│   │   │   # 7 vues : Mission Control · Tenants · Plans · Fraude · Équipe · Logs · Réglages
+│   │   ├── admin/page.tsx          # Control Panel 7 vues
 │   │   │
 │   │   └── api/
-│   │       ├── auth/route.ts          # OTP · JWT · refresh · logout
-│   │       ├── bookings/route.ts      # POST (maintenance check) · GET · PATCH (tx)
+│   │       ├── auth/route.ts
+│   │       ├── bookings/route.ts
 │   │       ├── tenants/
-│   │       │   ├── route.ts           # GET · POST → emitEvent("tenant.created")
-│   │       │   └── [slug]/route.ts    # GET · PATCH
-│   │       ├── services/[id]/route.ts
-│   │       ├── slots/route.ts
-│   │       ├── payments/route.ts      # Wave · OM · Stripe · refund
-│   │       ├── plans/route.ts         # GET · PATCH → syncPlanToTenants
-│   │       ├── webhooks/route.ts      # HMAC verify
+│   │       │   ├── route.ts        # GET · POST → tenant.created event
+│   │       │   ├── [slug]/route.ts
+│   │       │   └── search/route.ts # Geo + ranking SQL (ISR 30s)
+│   │       ├── favorites/route.ts  # GET · POST · DELETE → trending
+│   │       ├── payments/route.ts
+│   │       ├── plans/route.ts
+│   │       ├── slots/ services/ staff/ upload/ webhooks/
+│   │       ├── stripe/
+│   │       │   ├── connect/route.ts  # Express account + onboarding URL
+│   │       │   └── payment/route.ts  # PaymentIntent + platform fee
 │   │       ├── admin/
-│   │       │   ├── tenants/route.ts   # validate · block · change_plan …
-│   │       │   ├── fraud/route.ts
-│   │       │   ├── logs/route.ts
-│   │       │   ├── team/route.ts
-│   │       │   ├── settings/route.ts  # → emitEvent("settings.updated")
-│   │       │   ├── notifications/     # GET + PATCH (read)
-│   │       │   └── stream/route.ts    # EventLog feed polling 5s
+│   │       │   ├── tenants/ fraud/ logs/ team/ settings/
+│   │       │   ├── notifications/
+│   │       │   └── stream/route.ts   # EventLog polling 5s
 │   │       └── cron/
-│   │           ├── events/route.ts    # Retry EventLog (2 min)
-│   │           ├── notifications/     # Worker outbox WhatsApp
+│   │           ├── events/           # Retry EventLog (2min)
+│   │           ├── metrics/route.ts  # Recalcule TenantMetrics (daily)
+│   │           ├── notifications/    # Worker outbox WhatsApp
 │   │           ├── generate-slots/
 │   │           └── purge-logs/
 │   │
 │   ├── components/
-│   │   ├── ThemeInit.tsx              # Dark/light mode (client-only)
-│   │   ├── CookieBanner.tsx           # RGPD : Essential · Analytics · Marketing
-│   │   ├── LangSync.tsx               # Syncs URL [lang] → LangContext au mount
+│   │   ├── ThemeInit.tsx
+│   │   ├── CookieBanner.tsx         # RGPD — Tailwind, consent cookie 13 mois
+│   │   ├── LangSync.tsx             # Syncs [lang] → LangContext
+│   │   ├── SearchBar.tsx            # City autocomplete + useTransition
 │   │   └── ui/
-│   │       ├── Nav.tsx                # PublicNav (i18n) + DashboardNav (notif badge)
-│   │       ├── PhoneInput.tsx         # Sélecteur pays + indicatif international
-│   │       └── LangSwitcher.tsx       # Switch /fr ↔ /en dans le pathname courant
+│   │       ├── Nav.tsx              # PublicNav (i18n) + DashboardNav (badge)
+│   │       ├── PhoneInput.tsx       # Sélecteur pays
+│   │       └── LangSwitcher.tsx     # Switch /fr ↔ /en
 │   │
 │   ├── lib/
-│   │   ├── auth-client.ts             # getToken · getUser · setAuth · clearAuth
-│   │   ├── auth-guard.ts              # resolveRedirect() · DASHBOARD_ROLES · ADMIN_ROLES
-│   │   ├── route-auth.ts              # withAuth · withRole · withTenant · withActiveTenant
-│   │   ├── events.ts                  # emitEvent() · onEvent() + EventLog persistence
-│   │   ├── event-handlers.ts          # Registre centralisé handlers
-│   │   ├── event-queue.ts             # processEventQueue() · getQueueHealth()
-│   │   ├── domain-events.ts           # DomainEvents factory (DDD) + emitDomainEvent()
-│   │   ├── audit.ts                   # createAuditLog() centralisé
-│   │   ├── settings.ts                # getAllSettings() · cache 30s · requireNotMaintenance()
-│   │   ├── api-fetch.ts               # apiFetch() avec credentials:include
-│   │   ├── i18n.ts                    # Traductions FR/EN + type TranslationKey
-│   │   ├── i18n-server.ts             # getTranslations(lang) · SUPPORTED_LANGS · SEO_META
-│   │   ├── i18n-localize.ts           # getLocalized(field, lang) — champs Json bilingues
-│   │   ├── lang-context.tsx           # LangProvider (Context React, initialLang prop)
-│   │   ├── payment.ts                 # canUsePayment() — FREE = pas de paiement
-│   │   ├── cors.ts                    # getCorsHeaders() — allowlist origins
-│   │   └── rate-limit.ts              # rateLimitByPhone() via AuditLog
+│   │   ├── auth-client.ts           # getToken · getUser · setAuth · clearAuth
+│   │   ├── auth-guard.ts            # resolveRedirect() · DASHBOARD_ROLES
+│   │   ├── route-auth.ts            # withAuth · withRole · withTenant · withActiveTenant
+│   │   ├── events.ts                # emitEvent() · onEvent() + EventLog write
+│   │   ├── event-handlers.ts        # Registre centralisé handlers
+│   │   ├── event-queue.ts           # processEventQueue() · getQueueHealth()
+│   │   ├── domain-events.ts         # DomainEvents factory (DDD)
+│   │   ├── audit.ts                 # createAuditLog() centralisé
+│   │   ├── settings.ts              # getAllSettings() · cache 30s · requireNotMaintenance()
+│   │   ├── api-fetch.ts             # apiFetch() credentials:include
+│   │   ├── i18n.ts                  # Traductions FR/EN (5 namespaces)
+│   │   ├── i18n-server.ts           # getTranslations(lang) · SEO_META
+│   │   ├── i18n-localize.ts         # getLocalized({fr,en}, lang)
+│   │   ├── lang-context.tsx         # LangProvider (initialLang prop)
+│   │   ├── payment.ts               # canUsePayment()
+│   │   └── cors.ts                  # getCorsHeaders() allowlist
 │   │
 │   ├── services/
 │   │   ├── auth.service.ts
-│   │   ├── booking.service.ts         # createBooking · cancelBooking · emitEvent
-│   │   ├── fraud.service.ts           # 6 signaux · auto-block ≥ 80
-│   │   └── plan.service.ts            # syncPlanToTenants · resetTenantQuota
-│   │
-│   ├── domain/
-│   │   └── booking/booking.rules.ts   # Règles pures testables sans DB
+│   │   ├── booking.service.ts       # + emitEvent booking.created/cancelled
+│   │   ├── fraud.service.ts         # 6 signaux · auto-block ≥80
+│   │   ├── plan.service.ts          # syncPlanToTenants · resetTenantQuota
+│   │   ├── ranking.service.ts       # searchRanked() — Haversine SQL + score
+│   │   └── trending.service.ts      # onBooking/View/FavoriteForTrending()
 │   │
 │   └── infrastructure/
-│       ├── db/prisma.ts               # Prisma singleton
-│       ├── providers/payment.ts       # Wave · Orange · Stripe adapters
-│       └── queue/worker.ts            # Worker outbox WhatsApp
+│       ├── db/prisma.ts
+│       ├── providers/payment.ts
+│       └── queue/worker.ts
 │
 ├── prisma/
-│   ├── schema.prisma                  # 16 modèles
-│   ├── seed.ts                        # Salons + services + créneaux + admins
+│   ├── schema.prisma                # 21 modèles
+│   ├── seed.ts
 │   └── migrations/
 │       ├── 20260501_init/
 │       ├── 20260502_add_auditlog_ratelimit_index/
 │       ├── 20260502_add_tenant_horaires/
 │       ├── 20260502_add_plan_config/
-│       ├── 20260504_admin_enhancements/      # PlanConfig limits/features + SystemSetting
-│       ├── 20260504_event_log_and_notifications/ # EventLog + AdminNotification
-│       └── 20260505_geo_payments/            # Country + City + PaymentAccount + TenantPayout
+│       ├── 20260504_admin_enhancements/
+│       ├── 20260504_event_log_and_notifications/
+│       ├── 20260505_geo_payments/
+│       ├── 20260506_stripe_favorites/
+│       └── 20260507_ranking_ads/    # TenantMetrics · TenantTrending · AdCampaign · GeoBid
 │
-├── scripts/
-│   ├── fix-db.mjs        # Fix +352→+221, purge OTP, upsert SUPER_ADMIN
-│   └── seed-plans.mjs
-│
-└── public/
-    ├── manifest.json     # PWA manifest
-    └── robots.txt
+└── tailwind.config.ts               # CSS-variable tokens (bg, text, g1, g2…)
 ```
 
 ---
 
-## 5. Modèle de données
+## 5. Modèle de données — 21 modèles
 
-### 16 modèles Prisma
+### Vue d'ensemble
 
-```mermaid
-erDiagram
-    Country {
-        string code PK
-        json   name
-        string phoneCode
-        string currency
-    }
-    City {
-        string id PK
-        json   name
-        string slug UK
-        string countryCode FK
-    }
-    Tenant {
-        string id PK
-        string slug UK
-        enum   plan
-        enum   status
-        string country
-        string city
-    }
-    User {
-        string id PK
-        string phone UK
-        enum   role
-        string tenantId FK
-    }
-    Booking {
-        string id PK
-        string tenantId FK
-        string userId FK
-        enum   status
-        int    priceCents
-        string idempotencyKey UK
-    }
-    EventLog {
-        string id PK
-        string type
-        json   payload
-        string status
-        int    retries
-    }
-    AdminNotification {
-        string id PK
-        string type
-        string title
-        bool   read
-    }
-    PaymentAccount {
-        string id PK
-        string provider
-        string accountId
-        bool   isPlatform
-    }
-    TenantPayout {
-        string id PK
-        string tenantId FK
-        string provider
-        string accountNumber
-        bool   isVerified
-    }
-    SystemSetting {
-        string key PK
-        json   value
-    }
-    PlanConfig {
-        string plan UK
-        int    priceFcfa
-        json   limits
-        json   features
-    }
-
-    Country ||--o{ City : "a"
-    Tenant  ||--o{ Booking : "reçoit"
-    Tenant  ||--o{ TenantPayout : "configure"
-    User    ||--o{ Booking : "crée"
-```
-
-### Dataset géographique intégré
-
-| Pays | Code | Indicatif | Devise | Villes |
-|---|---|---|---|---|
-| Sénégal | SN | +221 | XOF | Dakar, Thiès |
-| Côte d'Ivoire | CI | +225 | XOF | Abidjan |
-| Mali | ML | +223 | XOF | Bamako |
-| Guinée | GN | +224 | GNF | Conakry |
-| Maroc | MA | +212 | MAD | Casablanca, Rabat |
-| Tunisie | TN | +216 | TND | Tunis |
-| France | FR | +33 | EUR | Paris, Lyon |
-| Belgique | BE | +32 | EUR | Bruxelles |
-| Luxembourg | LU | +352 | EUR | Luxembourg |
-| USA | US | +1 | USD | New York |
-| UK | GB | +44 | GBP | London |
-
-### Modèle paiement — stratégie marketplace
-
-```
-Phase 1 (actuel) :
-  Client → paie Belo (PaymentAccount.isPlatform=true)
-  Belo conserve les fonds
-  TenantPayout enregistré mais pas utilisé
-
-Phase 2 (payout manuel) :
-  Admin déclenche payout vers TenantPayout.accountNumber
-
-Phase 3 (payout auto) :
-  Cron calcule commission, vire automatiquement
-```
-
-### Enums
-
-| Enum | Valeurs |
+| Modèle | Rôle |
 |---|---|
-| `Plan` | `FREE` · `PRO` · `PREMIUM` |
-| `UserRole` | `CLIENT` · `OWNER` · `STAFF` · `ADMIN` · `SUPER_ADMIN` |
-| `TenantStatus` | `PENDING` · `ACTIVE` · `SUSPENDED` · `BLOCKED` · `FRAUD` |
-| `BookingStatus` | `PENDING` · `CONFIRMED` · `COMPLETED` · `CANCELLED` · `NO_SHOW` |
-| `PaymentStatus` | `PENDING` · `PAID` · `REFUNDED` · `FAILED` |
-| `EventLog.status` | `pending` · `processing` · `processed` · `failed` |
+| `Tenant` | Salon — lat/lng geo · stripeAccountId · plan · status |
+| `User` | Client / Owner / Staff / Admin — UserPreference |
+| `Service` | Prestation d'un salon |
+| `Slot` | Créneau horaire |
+| `Booking` | Réservation — idempotency · stripePaymentIntentId |
+| `NotificationLog` | Outbox WhatsApp/SMS (SKIP LOCKED) |
+| `Review` | Avis client 1–5 ★ |
+| `Favorite` | Wishlist client (userId × tenantId unique) |
+| `FraudAlert` | Alerte fraude — riskScore · signals JSON |
+| `AuditLog` | Immuable — toutes les actions |
+| `EventLog` | Persistence + retry des événements (pending→processed) |
+| `AdminNotification` | Inbox admins (tenant.created · fraud≥60) |
+| `PlanConfig` | Prix FCFA/EUR/USD + limits JSON + features JSON |
+| `SystemSetting` | Config plateforme (maintenance · commission · providers) |
+| `Country` | 11 pays — name Json · phoneCode · currency |
+| `City` | 14 villes — name Json · slug unique · countryCode FK |
+| `PaymentAccount` | Comptes Belo (Wave/Stripe/OM) — isPlatform=true |
+| `TenantPayout` | Infos payout salon (Phase 2+) |
+| `TenantMetrics` | ratingAvg · conversionRate · retentionRate · noShowRate |
+| `TenantTrending` | bookings24h · views24h · favorites24h · score |
+| `AdCampaign` | bidCents · budgetCents · spentCents · GeoBid[] |
+| `UserPreference` | favoriteCategories[] · favoriteCities[] |
+| `GeoBid` | bidModifier par ville par campagne |
+
+### Champs Tenant — principaux
+
+```prisma
+model Tenant {
+  // Geo (ranking)
+  lat  Float?
+  lng  Float?
+
+  // Stripe Connect
+  stripeAccountId          String?
+  stripeOnboardingComplete Boolean @default(false)
+
+  // Relations ranking
+  metrics     TenantMetrics?
+  trending    TenantTrending?
+  adCampaigns AdCampaign[]
+}
+```
+
+### Modèles ranking
+
+```prisma
+model TenantMetrics {
+  tenantId       String @unique
+  ratingAvg      Float  @default(5.0)
+  conversionRate Float  @default(0.0)   // bookings / views
+  retentionRate  Float  @default(0.0)   // returning / total
+  noShowRate     Float  @default(0.0)   // no-shows / confirmed
+}
+
+model TenantTrending {
+  tenantId     String @unique
+  bookings24h  Int    @default(0)
+  views24h     Int    @default(0)
+  favorites24h Int    @default(0)
+  score        Float  @default(0.0)   // bookings×3 + views×1 + favorites×2
+}
+
+model AdCampaign {
+  bidCents     Int @default(0)
+  budgetCents  Int @default(0)
+  spentCents   Int @default(0)
+  targetCPA    Int?
+  isActive     Boolean @default(true)
+  geoBids      GeoBid[]
+}
+```
 
 ---
 
@@ -410,19 +342,15 @@ Phase 3 (payout auto) :
 ```mermaid
 sequenceDiagram
     actor U as Utilisateur
-    participant L as Login Page
+    participant L as Login
     participant A as /api/auth
-    participant S as auth.service.ts
     participant DB as PostgreSQL
 
-    U->>L: Saisit numéro (PhoneInput — sélecteur pays)
-    L->>L: normalizePhone() → E.164 (+221771234567)
-    L->>A: POST send-otp → rateLimitByPhone(3/2min)
-    A->>S: sendOtp → hash OTP + INSERT AuditLog
-    S-->>U: WhatsApp OTP
-    U->>A: POST verify-otp → rateLimitByPhone(5/15min)
-    A->>S: verifyOtp → check hash + UPSERT User(role:CLIENT)
-    S->>S: signJWT(sub, role, tenantId)
+    U->>L: Numéro (PhoneInput sélecteur pays)
+    L->>L: normalizePhone() → E.164
+    L->>A: send-otp → rateLimitByPhone(3/2min) → hash + AuditLog
+    A-->>U: WhatsApp OTP (10 min)
+    U->>A: verify-otp → UPSERT User(CLIENT) → signJWT
     A->>A: Set httpOnly cookie belo_token (7j)
     A-->>L: { accessToken, user }
     L->>L: localStorage + router.replace(resolveRedirect(user))
@@ -430,345 +358,387 @@ sequenceDiagram
 
 ### proxy.ts — Interception Edge
 
-```typescript
-// Détection langue → redirect / → /fr ou /en
-if (pathname === "/") redirect(`/${detectLang(req)}`);  // Accept-Language + cookie
-
-// RBAC pages
-/admin      → ADMIN | SUPER_ADMIN
-/dashboard  → OWNER | STAFF | ADMIN | SUPER_ADMIN
-/profil     → tout utilisateur authentifié
-/api/admin  → ADMIN | SUPER_ADMIN + injection x-user-id/role
 ```
-
-### `withActiveTenant()` — enforcement
-
-```typescript
-// Vérifie existence + status ACTIVE avant toute opération métier
-const check = await withActiveTenant(auth, tenantId);
-if (!check.ok) return check.response; // 404 ou 403 TENANT_INACTIVE
+/           → detectLang(Accept-Language + cookie) → redirect /fr ou /en
+/admin      → ADMIN | SUPER_ADMIN (cookie JWT)
+/dashboard  → OWNER | STAFF | ADMIN | SUPER_ADMIN
+/profil     → authentifié
+/api/admin  → ADMIN | SUPER_ADMIN + header injection
 ```
 
 ---
 
 ## 7. Système d'événements
 
-### Architecture
+### Architecture — synchrone + persistant
 
 ```
-emitEvent("tenant.blocked", payload)
+emitEvent("booking.created", payload)
     │
     ├── 1. INSERT EventLog (pending) — fire-and-forget
-    └── 2. Dispatch synchrone des handlers
+    └── 2. Handlers synchrones
               ├── createAuditLog()
-              ├── runFraudCheck()        (booking.cancelled / payment.failed)
-              ├── AdminNotification      (tenant.created / fraud≥60)
-              └── invalidateSettingsCache (settings.updated / plan.updated)
+              ├── onBookingForTrending()    ← NEW
+              ├── runFraudCheck()           (booking.cancelled / payment.failed)
+              ├── AdminNotification         (tenant.created / fraud≥60)
+              └── invalidateSettingsCache   (settings.updated)
 ```
 
-### Types d'événements
+### Tous les événements
 
-| Event | Déclenché par |
-|---|---|
-| `tenant.blocked` | Admin / fraud engine auto-block |
-| `tenant.activated` | Admin validate/reactivate |
-| `tenant.created` | POST /api/tenants |
-| `plan.updated` | PATCH /api/plans |
-| `payment.failed` | Webhook / route |
-| `booking.created` | createBooking() |
-| `booking.cancelled` | cancelBooking() |
-| `fraud.detected` | fraud.service |
-| `settings.updated` | PATCH /api/admin/settings |
+| Event | Payload | Déclenché par |
+|---|---|---|
+| `tenant.blocked` | tenantId · adminId · reason | Admin / fraud engine |
+| `tenant.activated` | tenantId · adminId | Admin |
+| `tenant.created` | tenantId · tenantName · ownerId | POST /api/tenants |
+| `plan.updated` | plan · changes · adminId | PATCH /api/plans |
+| `payment.failed` | bookingId · tenantId | Webhook |
+| `booking.created` | bookingId · tenantId · userId · priceCents | createBooking() |
+| `booking.cancelled` | bookingId · tenantId · reason | cancelBooking() |
+| `fraud.detected` | tenantId · riskScore · signals | fraud.service |
+| `settings.updated` | keys · adminId | PATCH /api/admin/settings |
+| `favorite.created` | tenantId · userId | POST /api/favorites |
+| `tenant.viewed` | tenantId · userId? | GET /api/tenants/:slug |
 
-### Domain Events (DDD)
-
-```typescript
-await emitDomainEvent(
-  DomainEvents.tenantBlocked({ tenantId, adminId, reason })
-  // → { eventId, type, payload, occurredAt, schemaVersion }
-);
-```
-
-### EventLog retry (cron toutes les 2 min)
+### EventLog — retry (cron 2 min)
 
 ```
 pending → processing → processed ✓
-                    └→ pending  (retry si retries < maxRetries=3)
-                    └→ failed ✗ (après 3 tentatives)
+                    └→ pending  (retry < maxRetries=3)
+                    └→ failed ✗
 ```
 
 ---
 
-## 8. Fraud Engine
+## 8. Ranking Engine
+
+### Formule de score (SQL, single round-trip)
+
+```sql
+score =
+  (1.0 / (haversine_distance_km + 0.01)) × 0.30   -- proximité géo
+  + (ratingAvg / 5.0)                             × 0.20   -- qualité
+  + conversionRate                                × 0.20   -- conversion
+  + retentionRate                                 × 0.20   -- rétention
+  - noShowRate                                    × 0.10   -- pénalité
+  + LEAST(0.1, bidCents / 10000.0)                × 0.10   -- boost pub
+  + planBoost (PREMIUM +0.05, PRO +0.02)
+```
+
+### Distance Haversine (PostgreSQL)
+
+```sql
+6371.0 * acos(
+  LEAST(1.0,
+    cos(radians($lat)) * cos(radians(t.lat))
+    * cos(radians(t.lng) - radians($lng))
+    + sin(radians($lat)) * sin(radians(t.lat))
+  )
+) AS distance_km
+```
+
+`LEAST(1.0, …)` — protection contre les erreurs de domaine `acos()` dues à l'arrondi float.
+
+### Optimisation des index
+
+```sql
+-- Pré-filtre bounding-box (utilise l'index)
+WHERE lat BETWEEN $lat-delta AND $lat+delta
+  AND lng BETWEEN $lng-delta AND $lng+delta
+
+-- Puis Haversine sur le sous-ensemble filtré
+```
+
+### Utilisation
+
+```typescript
+import { searchRanked } from "@/services/ranking.service";
+
+const { tenants, total } = await searchRanked({
+  lat:      14.7167,
+  lng:      -17.4677,
+  city:     "dakar",
+  category: "hair",
+  radius:   10,       // km
+  pageSize: 20,
+});
+// → tenants triés par score décroissant
+// → chaque tenant a: distance, ratingAvg, score
+```
+
+---
+
+## 9. Trending Engine
+
+### Score temps réel
+
+```
+trending_score = bookings24h × 3 + views24h × 1 + favorites24h × 2
+```
+
+### Mise à jour via événements
+
+| Événement | Action |
+|---|---|
+| `booking.created` | `bookings24h++` puis recalcul score |
+| `favorite.created` | `favorites24h++` puis recalcul score |
+| `tenant.viewed` | `views24h++` puis recalcul score |
+
+### Reset quotidien
+
+Le cron `/api/cron/metrics` (daily 03h00) remet tous les compteurs à zéro.
+
+---
+
+## 10. Ads Engine
+
+### Modèles
+
+```prisma
+AdCampaign { bidCents, budgetCents, spentCents, targetCPA, isActive }
+GeoBid     { campaignId, citySlug, bidModifier }
+```
+
+### Ad boost dans le ranking
+
+```sql
++ LEAST(0.1, MAX(ac.bidCents)::FLOAT / 10000.0) * 0.1
+```
+
+Le boost est **plafonné à 0.1** dans le score total — un bon salon sans pub aura toujours un meilleur score qu'un mauvais salon avec une forte enchère.
+
+### Roadmap Ads
+
+| Phase | Fonctionnalité |
+|---|---|
+| Phase 1 ✅ | Boost dans le ranking SQL |
+| Phase 2 | Budget pacing (expected = heure/24 × budget) |
+| Phase 3 | Smart bidding : `newBid = currentBid × (targetCPA / currentCPA)` |
+| Phase 4 | Time-of-day optimization (HourlyPerformance) |
+
+---
+
+## 11. Fraud Engine
 
 ### Score 0–100, 6 signaux
 
 | Signal | Condition | Poids |
 |---|---|---|
-| `high_cancellations_24h` | > 5 annulations/24h | +8 par excès (max 40) |
-| `high_cancellation_rate_30d` | Taux > 40%/30j | jusqu'à +30 |
-| `quota_gaming_suspected` | Quota élevé + peu de vrais bookings | +20 |
-| `booking_velocity_spike` | > 20 créations/1h (bot) | +3/excès (max 35) |
-| `existing_fraud_alert` | Alerte active score > 50 | +30% du score existant |
-| `cross_tenant_canceller` | Utilisateur annulant ≥ 2 autres tenants/24h | +5/user (max 25) |
+| `high_cancellations_24h` | > 5 annulations/24h | +8 par excès |
+| `high_cancellation_rate_30d` | Taux > 40% | jusqu'à +30 |
+| `quota_gaming_suspected` | Quota élevé + peu de bookings | +20 |
+| `booking_velocity_spike` | > 20 créations/1h | +3/excès |
+| `existing_fraud_alert` | Alerte active > 50 | +30% du score existant |
+| `cross_tenant_canceller` | User annule ≥ 2 autres tenants/24h | +5/user |
 
 ```
 score 0–29  → clean
 score 30–59 → NEW FraudAlert
 score 60–79 → AdminNotification ⚠️
-score ≥ 80  → auto-block → tenant.status = FRAUD
+score ≥ 80  → auto-block → status = FRAUD
 ```
 
 ---
 
-## 9. Admin Control Panel
+## 12. Admin Control Panel
 
-### 7 vues fonctionnelles
+### 7 vues
 
-| Vue | Données réelles | Actions |
+| Vue | Données | Actions |
 |---|---|---|
-| Mission Control | KPIs DB · queue PENDING · EventLog feed 5s | Valider en 1 clic |
-| Tenants | Tableau filtrable · statut coloré | validate · block · suspend · change_plan |
-| Plans | Prix FCFA/EUR + limits JSON + features | Éditer tout |
-| Fraude | FraudAlert · risk scores · 6 signaux | Enquêter · Clore |
+| Mission Control | KPIs · EventLog stream 5s | Valider PENDING |
+| Tenants | Filtrable · statut coloré | validate · block · change_plan |
+| Plans | Prix + limits + features | Éditer · syncPlanToTenants |
+| Fraude | FraudAlert · 6 signaux | Enquêter · Clore |
 | Équipe | Admins · lastLogin | Voir rôles |
-| Logs | AuditLog paginé · actor + tenant | Filtrer |
-| Réglages | Maintenance · commission · providers · OTP bypass | Sauvegarder |
-
-### Live Feed — EventLog polling
-
-```typescript
-GET /api/admin/stream?since=ISO&limit=30
-→ { events: EventLog[], cursor, health: { pending, processed, failed } }
-// Admin panel poll toutes les 5s
-```
-
-### Notifications admin
-
-```typescript
-// Auto-créées pour :
-"tenant_validation_required" → nouveau salon inscrit
-"fraud_alert"                → score fraude ≥ 60
-
-GET  /api/admin/notifications     → { notifications[], unreadCount }
-PATCH /api/admin/notifications?all=1 → mark all read
-```
+| Logs | AuditLog paginé | Filtrer |
+| Réglages | Maintenance · commission · providers | Sauvegarder |
 
 ---
 
-## 10. i18n — Routing multilingue & SEO
+## 13. i18n — Routing multilingue & SEO
 
 ### Architecture URL
 
 ```
-/             → redirect → /fr ou /en  (proxy Edge + Accept-Language)
-/fr           → Landing FR  ● SSG (ISR 2min)
-/en           → Landing EN  ● SSG (ISR 2min)
-/fr/salons    → Listing FR  ƒ Server (ISR 60s)
-/en/salons    → Listing EN  ƒ Server (ISR 60s)
-/fr/salons/dakar    → Ville Dakar FR  ● SSG (ISR 5min)
-/fr/salons/paris    → Ville Paris FR  ● SSG (ISR 5min)
-/fr/salons/bruxelles → …
+/                    → redirect /fr ou /en (proxy Edge)
+/fr                  → Landing FR  ● SSG 2min
+/en                  → Landing EN  ● SSG 2min
+/fr/for-salons       → B2B FR      ● SSG 1h
+/en/for-salons       → B2B EN      ● SSG 1h
+/fr/plans            → Tarifs FR   ● SSG 5min
+/en/plans            → Tarifs EN   ● SSG 5min
+/fr/salons           → Listing FR  ƒ Server
+/fr/salons/dakar     → Ville FR    ● SSG 5min
+/fr/salons/dakar/coiffure → Ville+Catégorie ● SSG 10min
 ```
 
-### Fichiers clés
+### Namespaces i18n (i18n.ts)
 
-| Fichier | Rôle |
+| Namespace | Clés |
 |---|---|
-| `src/lib/i18n.ts` | `translations` objet FR/EN + `TranslationKey` type |
-| `src/lib/i18n-server.ts` | `getTranslations(lang)` — t() synchrone pour Server Components · `SEO_META` · `isValidLang()` |
-| `src/lib/i18n-localize.ts` | `getLocalized({fr, en}, lang)` — résout les champs Json bilingues (Country.name, City.name) |
-| `src/lib/lang-context.tsx` | `LangProvider` (Context React) · accepte `initialLang` prop |
-| `src/hooks/useLang.ts` | Re-export depuis `lang-context` (backward compat) |
-| `src/components/LangSync.tsx` | Client — `setLang(lang)` au mount depuis URL segment |
-| `src/components/ui/LangSwitcher.tsx` | Remplace `/fr/` ↔ `/en/` dans le pathname courant |
+| `common` | nav · hero · search · categories · cta |
+| `booking` | how_title · steps · slots · confirmation |
+| `dashboard` | login · plans labels |
+| `for_salons` | badge · hero · social_proof · features · FAQ · CTA |
+| `plans` | toggle · plan names · features |
 
-### SEO généré par `[lang]/layout.tsx`
-
-```html
-<!-- Sur /fr/salons/dakar -->
-<html lang="fr">
-<link rel="canonical"  href="https://belo-khaki.vercel.app/fr/salons/dakar" />
-<link rel="alternate"  href="https://belo-khaki.vercel.app/fr/salons/dakar" hreflang="fr" />
-<link rel="alternate"  href="https://belo-khaki.vercel.app/en/salons/dakar" hreflang="en" />
-<link rel="alternate"  href="https://belo-khaki.vercel.app/fr/salons/dakar" hreflang="x-default" />
-<title>Salons de beauté à Dakar | Belo</title>
-<meta name="description" content="Réservez les meilleurs salons…" />
-<script type="application/ld+json">{"@type":"ItemList","name":"Salons à Dakar"}</script>
-```
-
-### Pages serveur — bug corrigé
-
-> **Bug critique corrigé** : les pages `[lang]/page.tsx` et `[lang]/salons/page.tsx` faisaient
-> `fetch(process.env.NEXT_PUBLIC_APP_URL + "/api/tenants")`. Cette variable est `undefined`
-> côté serveur Vercel → 0 résultats silencieusement.
-> **Fix** : requête Prisma directe dans les Server Components — aucun HTTP, aucune dépendance env.
+### Helpers
 
 ```typescript
-// Avant (bugué) :
-const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/tenants?pageSize=4`);
+// Server Component
+const t = getTranslations("en");
+t("for_salons.hero_title")  // → "Join Belo —"
 
-// Après (correct) :
-const [tenants, total] = await Promise.all([
-  prisma.tenant.findMany({ where: { status: "ACTIVE", deletedAt: null }, take: 4 }),
-  prisma.tenant.count({ where: { status: "ACTIVE", deletedAt: null } }),
-]);
-```
+// Client Component
+const { t } = useLang();
+t("hero_title")  // → "Beauty, booked"
 
-### Utilisation dans un composant client
-
-```tsx
-import { useLang } from "@/hooks/useLang";
-const { t, lang, setLang } = useLang();
-t("hero_title")  // → "La beauté réservée" (fr) | "Beauty, booked" (en)
-```
-
-### Utilisation dans un Server Component
-
-```tsx
-import { getTranslations } from "@/lib/i18n-server";
-const t = getTranslations(lang);  // synchrone, pas de hook
-t("hero_title")  // → "La beauté réservée"
+// Champs bilingues DB
+getLocalized(city.name, "en")  // { fr:"Dakar", en:"Dakar" } → "Dakar"
 ```
 
 ---
 
-## 11. Géolocalisation & Dataset pays/villes
+## 14. Géolocalisation & Dataset
 
-### Modèles
+### 11 pays · 14 villes intégrés
 
-```typescript
-// Country — 11 pays actifs
-{ code: "SN", name: {fr:"Sénégal", en:"Senegal"}, phoneCode:"+221", currency:"XOF" }
-
-// City — 14 villes actives
-{ slug: "dakar", name: {fr:"Dakar", en:"Dakar"}, countryCode: "SN" }
-```
-
-### Helper multilingue
-
-```typescript
-import { getLocalized } from "@/lib/i18n-localize";
-
-const cityName = getLocalized(city.name, "en");  // → "Dakar"
-const cityName = getLocalized(city.name, "fr");  // → "Dakar"
-const country  = getLocalized(country.name, "en"); // → "Senegal"
-```
-
-### Sélecteur pays dans PhoneInput
-
-Le composant `PhoneInput` utilise la même liste de pays pour l'indicatif téléphonique. Les pays du dataset géo et les indicatifs du `PhoneInput` sont alignés.
-
----
-
-## 12. RGPD & Cookie Consent
-
-### Bannière `CookieBanner.tsx`
-
-- Affichée au premier accès (pas de consent stocké)
-- Consent sauvegardé dans `localStorage("belo_cookie_consent")`
-- 3 catégories :
-
-| Catégorie | Par défaut | Modifiable |
+| Pays | Code | Villes |
 |---|---|---|
-| `essential` | `true` | ❌ toujours actif |
-| `analytics` | `false` | ✓ |
-| `marketing` | `false` | ✓ |
+| Sénégal | SN +221 XOF | Dakar, Thiès |
+| Côte d'Ivoire | CI +225 XOF | Abidjan |
+| Maroc | MA +212 MAD | Casablanca, Rabat |
+| France | FR +33 EUR | Paris, Lyon |
+| Belgique | BE +32 EUR | Bruxelles |
+| Luxembourg | LU +352 EUR | Luxembourg |
 
-```typescript
-// Structure du consentement
-{
-  essential:  true,     // toujours vrai
-  analytics:  boolean,
-  marketing:  boolean,
+### Coordonnées Tenant
+
+```prisma
+model Tenant {
+  lat Float?  // décimal degrés
+  lng Float?
+  // index: WHERE lat IS NOT NULL AND lng IS NOT NULL
 }
 ```
 
-### Cookies auth (conformité RGPD)
+---
+
+## 15. RGPD & Cookie Consent
+
+### CookieBanner
+
+- Consent stocké dans `localStorage(belo_cookie_consent)` + cookie `belo_consent`
+- Expiration 13 mois (conformité GDPR §7)
+- 3 catégories : `essential` · `analytics` · `marketing`
+
+### Cookies auth
 
 | Cookie | Attributs | Durée |
 |---|---|---|
 | `belo_token` | `HttpOnly; Secure; SameSite=Lax` | 7 jours |
 | `belo_refresh` | `HttpOnly; Secure; SameSite=Lax; Path=/api/auth` | 30 jours |
-| `belo_lang` | `SameSite=Lax` | Session |
-
-> Les cookies d'authentification sont **HttpOnly** — inaccessibles en JavaScript, protégés contre le XSS.
+| `belo_consent` | `SameSite=Lax` | 13 mois |
 
 ---
 
-## 13. Flux de navigation
+## 16. Stripe Connect — Marketplace Payments
+
+### Flux paiement
+
+```
+Phase 1 (actuel) :  Client → Belo encaisse tout (aucun transfer)
+Phase 2 :           Admin déclenche payout manuel → TenantPayout.accountNumber
+Phase 3 :           Cron calcule commission → virement automatique
+```
+
+### API Stripe
+
+```typescript
+// Créer compte Express + onboarding URL
+POST /api/stripe/connect
+→ { url: "https://connect.stripe.com/...", accountId: "acct_xxx" }
+
+// Vérifier statut
+GET /api/stripe/connect
+→ { connected, onboardingComplete, chargesEnabled, payoutsEnabled }
+
+// PaymentIntent avec platform fee
+POST /api/stripe/payment
+body: { bookingId, returnUrl }
+→ { clientSecret, paymentIntentId, amountCents, platformFeeCents }
+```
+
+### Commission
+
+Commission lue depuis `SystemSetting("commission_percent")` (défaut : 3%).
+Conversion XOF → EUR : `1 EUR ≈ 655.957 XOF`.
+
+---
+
+## 17. Flux de navigation
 
 ### Client → Réservation
 
 ```mermaid
 flowchart TD
-    A([Visiteur]) --> B[/ → redirect /fr]
-    B --> C[/fr Landing SSG]
-    C --> D[/fr/salons]
+    A([Visiteur]) --> B[/ → /fr Landing SSG]
+    B --> C[SearchBar → /fr/salons?city=dakar]
+    C --> D[/fr/salons/dakar/coiffure SSG]
     D --> E[/booking/:slug]
     E --> F{Token ?}
     F -- Non --> G[/login OTP]
-    G --> H{Rôle ?}
-    H -- CLIENT --> E
-    F -- Oui --> I[Étape 1 Service]
-    I --> J[Étape 2 Créneau]
-    J --> K[Étape 3 Confirmer]
-    K --> L{Dépôt PRO+ ?}
-    L -- Non --> M[POST /api/bookings → emitEvent booking.created]
-    L -- Oui --> N[POST /api/payments/init → Wave/OM/Stripe]
-    M --> O[Étape 4 ✅]
-    N --> P[POST /api/webhooks] --> O
+    G --> H[POST /api/bookings → emitEvent booking.created]
+    H --> I[trending++ · audit · fraud check]
+    H --> J[Étape 4 ✅]
 ```
 
-### Super-Admin
+### Gérant → Onboarding
 
 ```mermaid
 flowchart TD
-    A[Login 661000001] --> B[/admin]
-    B --> C[Mission Control<br/>EventLog stream 5s]
-    B --> D[Tenants → actions + events]
-    B --> E[Plans → syncPlanToTenants]
-    B --> F[Fraude → 6 signaux auto]
-    B --> G[Réglages → maintenance + providers]
-    G --> H[→ emitEvent settings.updated<br/>→ invalidateCache]
+    A[Login OWNER] --> B[/dashboard]
+    B --> C[Profil + Services + Horaires]
+    B --> D[/dashboard/stripe → POST /api/stripe/connect]
+    D --> E[Stripe Express Onboarding]
+    E --> F[GET /api/stripe/connect → onboardingComplete=true]
 ```
 
 ---
 
-## 14. API Routes — référence complète
+## 18. API Routes — référence complète
 
-### Authentification
-
-| Méthode | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/auth?action=send-otp` | OTP WhatsApp · rate 3/2min |
-| `POST` | `/api/auth?action=verify-otp` | Vérifie → JWT + cookies httpOnly |
-| `POST` | `/api/auth?action=refresh` | Rafraîchit access token |
-| `POST` | `/api/auth?action=logout` | Efface cookies |
-
-### Salons & Services
+### Recherche & Tenants
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/tenants` | — | Liste ACTIVE · Cache 2min · CORS |
-| `POST` | `/api/tenants` | CLIENT | Inscription → `emitEvent("tenant.created")` |
-| `GET` | `/api/tenants/:slug` | — | Profil + services · Cache 60s |
-| `PATCH` | `/api/tenants/:slug` | OWNER | Màj profil · horaires |
-| `GET` | `/api/services?tenantId=` | — | Liste |
-| `POST/PATCH/DELETE` | `/api/services[/:id]` | OWNER | CRUD |
-| `GET/POST/DELETE` | `/api/slots` | —/OWNER | Créneaux |
+| `GET` | `/api/tenants` | — | Liste ACTIVE · Cache 2min |
+| `POST` | `/api/tenants` | CLIENT | Inscription → `tenant.created` |
+| `GET` | `/api/tenants/:slug` | — | Profil + services |
+| `PATCH` | `/api/tenants/:slug` | OWNER | Màj profil |
+| `GET` | `/api/tenants/search` | — | **Geo + ranking SQL** · params: `lat lng city category radius` |
 
 ### Réservations & Paiements
 
 | Méthode | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/bookings` | CLIENT | Crée · idempotent · **requireNotMaintenance()** |
+| `POST` | `/api/bookings` | CLIENT | Crée · idempotent · requireNotMaintenance |
 | `GET` | `/api/bookings?tenantId=` | OWNER | Liste salon |
-| `PATCH` | `/api/bookings` | OWNER | CONFIRMED/CANCELLED · transaction atomique |
-| `POST` | `/api/payments?action=init` | CLIENT | Initie Wave/OM/Stripe vers compte Belo |
-| `GET` | `/api/payments?bookingId=` | CLIENT | Vérifie statut |
-| `POST` | `/api/payments?action=refund` | OWNER PREMIUM | Remboursement |
-| `POST` | `/api/webhooks` | HMAC | Wave · Orange · Stripe (idempotent) |
+| `PATCH` | `/api/bookings` | OWNER | CONFIRMED / CANCELLED · tx atomique |
+| `POST` | `/api/payments?action=init` | CLIENT | Wave / OM / Stripe |
+| `POST` | `/api/stripe/connect` | OWNER | Crée Express account |
+| `GET` | `/api/stripe/connect` | OWNER | Statut onboarding |
+| `POST` | `/api/stripe/payment` | CLIENT | PaymentIntent + platform fee |
+| `POST` | `/api/webhooks` | HMAC | Wave · Orange · Stripe |
+
+### Favoris & Social
+
+| Méthode | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/favorites` | CLIENT | Liste favoris ou `?tenantId=` check |
+| `POST` | `/api/favorites` | CLIENT | Ajoute · `favorite.created` → trending |
+| `DELETE` | `/api/favorites?tenantId=` | CLIENT | Supprime |
 
 ### Admin
 
@@ -778,24 +748,24 @@ flowchart TD
 | `POST` | `/api/admin/tenants?action=do-action` | ADMIN | validate · block · change_plan · … |
 | `GET/PATCH` | `/api/admin/fraud` | ADMIN | Alertes fraude |
 | `GET` | `/api/admin/logs` | ADMIN | AuditLog paginé |
-| `GET/PATCH` | `/api/admin/team` | ADMIN/SUPER | Équipe admin |
-| `GET/PATCH` | `/api/admin/settings` | SUPER | Config + `emitEvent("settings.updated")` |
+| `GET/PATCH` | `/api/admin/settings` | SUPER | Config + `settings.updated` |
 | `GET/PATCH` | `/api/admin/notifications` | ADMIN | Inbox + mark read |
-| `GET` | `/api/admin/stream` | ADMIN | EventLog feed (polling 5s) |
+| `GET` | `/api/admin/stream` | ADMIN | EventLog feed polling 5s |
 | `GET/PATCH` | `/api/plans` | —/ADMIN | Tarifs + limits/features |
 
 ### Cron jobs
 
 | Endpoint | Fréquence | Description |
 |---|---|---|
-| `/api/cron/events` | toutes les 2 min | Retry EventLog (SKIP LOCKED) |
-| `/api/cron/notifications` | toutes les minutes | Worker outbox WhatsApp |
-| `/api/cron/generate-slots` | quotidien 02h00 | Créneaux J+14 |
-| `/api/cron/purge-logs` | hebdo dimanche 03h00 | Archive NotificationLog |
+| `/api/cron/events` | `*/2 * * * *` | Retry EventLog (SKIP LOCKED) |
+| `/api/cron/metrics` | `0 3 * * *` | Recalcule TenantMetrics + reset trending |
+| `/api/cron/notifications` | `*/1 * * * *` | Worker outbox WhatsApp |
+| `/api/cron/generate-slots` | `0 2 * * *` | Créneaux J+14 |
+| `/api/cron/purge-logs` | `0 3 * * 0` | Archive NotificationLog |
 
 ---
 
-## 15. Contrôle d'accès par rôle (RBAC)
+## 19. Contrôle d'accès par rôle (RBAC)
 
 ### `resolveRedirect()` post-login
 
@@ -805,7 +775,6 @@ ADMIN       → /dashboard
 OWNER       → /dashboard
 STAFF       → /dashboard
 CLIENT      → /profil
-null        → /login
 ```
 
 ### Limites par plan
@@ -819,108 +788,92 @@ null        → /login
 | Dépôt / acompte | ✗ | ✓ | ✓ |
 | WhatsApp auto | ✗ | ✓ | ✓ |
 | Analytics | ✗ | ✗ | ✓ |
-| Remboursement auto | ✗ | ✗ | ✓ |
-| Domaine custom | ✗ | ✗ | ✓ |
-
-> Limites stockées en JSON dans `PlanConfig.limits` + `PlanConfig.features` — modifiables depuis l'admin sans migration.
+| Stripe Connect | ✗ | ✓ | ✓ |
+| API Webhook | ✗ | ✗ | ✓ |
 
 ---
 
-## 16. PWA — Bouton d'installation
+## 20. PWA — Bouton d'installation
 
 ```tsx
-// src/components/InstallPWA.tsx
-// Affiché uniquement sur mobile (≤768px) si prompt disponible
-// iOS Safari : non supporté → message manuel "Partager → Ajouter à l'écran"
+// InstallPWA.tsx — mobile uniquement, masqué si déjà installé
+// iOS Safari : message manuel "Partager → Ajouter à l'écran d'accueil"
 ```
 
 ---
 
-## 17. Variables d'environnement
-
-### Obligatoires
+## 21. Variables d'environnement
 
 ```bash
+# Base de données
 DATABASE_URL="postgresql://user:pass@host/db?pgbouncer=true"
 DIRECT_URL="postgresql://user:pass@host/db?sslmode=require"
-JWT_SECRET="minimum-32-chars"
+
+# Auth
+JWT_SECRET="min-32-chars"
 JWT_EXPIRES_IN="7d"
 REFRESH_TOKEN_EXPIRES_IN="30d"
+
+# App
 NEXT_PUBLIC_APP_URL="https://belo-khaki.vercel.app"
-CRON_SECRET="secret-crons"
-```
+CRON_SECRET="secret"
 
-### Paiements
-
-```bash
-WAVE_API_KEY=""         WAVE_WEBHOOK_SECRET=""
-ORANGE_API_KEY=""       ORANGE_MERCHANT_ID=""
-STRIPE_SECRET_KEY=""    STRIPE_WEBHOOK_SECRET=""
+# Paiements
+WAVE_API_KEY=""            WAVE_WEBHOOK_SECRET=""
+ORANGE_API_KEY=""          ORANGE_MERCHANT_ID=""
+STRIPE_SECRET_KEY=""       STRIPE_WEBHOOK_SECRET=""
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=""
-```
 
-### WhatsApp & Médias
+# WhatsApp
+WHATSAPP_PHONE_ID=""       WHATSAPP_TOKEN=""
+# OTP_BYPASS=true  → Dev : OTP dans les logs
 
-```bash
-WHATSAPP_PHONE_ID=""    WHATSAPP_TOKEN=""
-# OTP_BYPASS=true  → Dev : OTP dans les logs, pas envoyé
+# Stockage
 R2_ACCOUNT_ID=""  R2_ACCESS_KEY=""  R2_SECRET_KEY=""
-R2_BUCKET="belo-media"  NEXT_PUBLIC_CDN_URL="https://cdn.belo.sn"
+R2_BUCKET="belo-media"
+NEXT_PUBLIC_CDN_URL="https://cdn.belo.sn"
 ```
 
 ---
 
-## 18. Installation & Développement
+## 22. Installation & Développement
 
 ```bash
 git clone https://github.com/Ahmesgroup/belo.git
 cd belo && npm install
 
-# Configurer l'environnement
-cp .env.example .env.local   # remplir DATABASE_URL, JWT_SECRET, etc.
+cp .env.example .env.local    # remplir DATABASE_URL, JWT_SECRET…
 
-# Initialiser la DB
-npx prisma migrate deploy    # applique toutes les migrations
-npm run db:seed              # salons + services + admins + pays + villes
+npx prisma migrate deploy     # toutes les migrations
+npm run db:seed               # salons + admins + pays + villes
 
-# Lancer
-npm run dev  # → http://localhost:3000
+npm run dev                   # → http://localhost:3000
 ```
 
 ### Scripts utiles
 
 ```bash
-npm run build        # prisma generate + migrate deploy + next build
-npm run db:studio    # Prisma Studio → http://localhost:5555
-npm run db:seed      # Reseed
-node scripts/fix-db.mjs  # Fix admin prod (+352→+221, purge OTP)
-```
-
-### OTP bypass dev
-
-```bash
-# .env.local
-OTP_BYPASS=true   # OTP affiché dans la console, pas envoyé sur WhatsApp
+npm run build           # prisma generate + migrate deploy + next build
+npm run db:studio       # Prisma Studio → http://localhost:5555
+node scripts/fix-db.mjs # Fix admin prod (+352→+221, purge OTP)
 ```
 
 ---
 
-## 19. Déploiement Vercel
+## 23. Déploiement Vercel
 
 ```bash
-npm run build          # vérifier 0 erreurs TS en local
-git add . && git commit -m "feat: ..."
-git push
-npx vercel --prod
+npm run build && git push && npx vercel --prod
 ```
 
-### `vercel.json` — Cron Jobs
+### `vercel.json` — Cron Jobs complet
 
 ```json
 {
   "crons": [
     { "path": "/api/cron/events",          "schedule": "*/2 * * * *" },
     { "path": "/api/cron/notifications",   "schedule": "*/1 * * * *" },
+    { "path": "/api/cron/metrics",         "schedule": "0 3 * * *"   },
     { "path": "/api/cron/generate-slots",  "schedule": "0 2 * * *"   },
     { "path": "/api/cron/purge-logs",      "schedule": "0 3 * * 0"   }
   ]
@@ -929,57 +882,51 @@ npx vercel --prod
 
 ---
 
-## 20. Maintenance DB
+## 24. Maintenance DB
 
 ### Migrations appliquées
 
 | Migration | Contenu |
 |---|---|
-| `20260501_init` | Schéma complet initial (12 modèles) |
+| `20260501_init` | 12 modèles initiaux |
 | `20260502_add_auditlog_ratelimit_index` | Index performance |
-| `20260502_add_tenant_horaires` | Champ horaires JSON |
-| `20260502_add_plan_config` | Modèle PlanConfig |
-| `20260504_admin_enhancements` | PlanConfig +limits/features · SystemSetting |
+| `20260502_add_tenant_horaires` | horaires JSON |
+| `20260502_add_plan_config` | PlanConfig |
+| `20260504_admin_enhancements` | PlanConfig limits/features · SystemSetting |
 | `20260504_event_log_and_notifications` | EventLog · AdminNotification |
-| `20260505_geo_payments` | Country · City · PaymentAccount · TenantPayout + seed 11 pays 14 villes |
+| `20260505_geo_payments` | Country · City · PaymentAccount · TenantPayout + seed |
+| `20260506_stripe_favorites` | Tenant.stripeAccountId · Booking.platformFeeCents · Favorite |
+| `20260507_ranking_ads` | Tenant.lat/lng · TenantMetrics · TenantTrending · AdCampaign · GeoBid · UserPreference |
 
-### Fix compte SUPER_ADMIN
+### Fix SUPER_ADMIN prod
 
 ```bash
 node scripts/fix-db.mjs
-# → +352661000001 → +221661000001
-# → SUPER_ADMIN upsert
-# → purge OTP/rate-limit logs
-```
-
-### Créer une nouvelle migration
-
-```bash
-npx prisma migrate dev --name "nom_feature"
-npx prisma migrate deploy  # prod (automatique via npm run build)
+# → +352 → +221, upsert SUPER_ADMIN, purge OTP/rate-limit
 ```
 
 ---
 
-## 21. Annexe — Décisions d'architecture
+## 25. Annexe — Décisions d'architecture
 
 | Décision | Choix | Raison |
 |---|---|---|
 | Auth | OTP WhatsApp + JWT maison | Marché africain, pas de Google/GitHub |
-| DB | Neon serverless PostgreSQL | Scale-to-zero, coût minimal phase 1 |
-| Event queue | EventLog table (PostgreSQL) | Durabilité + retry sans Redis |
+| DB | Neon serverless PostgreSQL | Scale-to-zero, coût minimal |
+| Event queue | EventLog table | Durabilité + retry sans Redis |
 | Event bus | Synchrone in-process | Vercel serverless = pas de mémoire partagée |
-| Pages localisées | Server Components + Prisma direct | Auto-HTTP fetch = URL undefined sur Vercel |
-| SEO ville | SSG `/[lang]/salons/[city]` | Pages pré-rendues, crawlables, hreflang |
-| Paiement | Belo encaisse (Phase 1) | Marketplace standard : plateforme collecte, payout manuel |
-| Fraud engine | 6 signaux + auto-block ≥ 80 | Actif sans intervention manuelle |
-| Plans | JSON limits/features en DB | Modifiables sans migration depuis l'admin |
-| Settings | SystemSetting + cache 30s | Config dynamique, invalidée par event |
-| Cookies RGPD | Bannière + localStorage | Pas de cookie analytics sans consentement |
-| Lang routing | `/[lang]/` SSG + LangSync client | SEO correct + contexte React synchronisé |
-| Proxy (edge) | `proxy.ts` (Next.js 16) | Remplace `middleware.ts` — interception + lang detection |
-| CORS | getCorsHeaders() allowlist | Pas de wildcard `*` en production |
+| Ranking | $queryRaw SQL unique | Score multi-signal en un seul round-trip |
+| Geo index | Bounding-box + Haversine | Index utilisé, LEAST() pour sécurité float |
+| Trending | Event-driven (pas de polling) | Mise à jour immédiate, O(1) par événement |
+| Pages localisées | Server Components + Prisma direct | HTTP self-fetch = URL undefined sur Vercel |
+| SEO ville+catégorie | SSG `/[lang]/salons/[city]/[category]` | 224+ pages pré-rendues, hreflang |
+| Paiement | Belo encaisse (Phase 1) | Marketplace standard — payout manuel d'abord |
+| Stripe Connect | Express accounts | Plus simple que Custom, onboarding hébergé |
+| Ads boost | Plafonné à 0.1 dans score | Qualité prime sur budget |
+| Cookies RGPD | localStorage + cookie 13 mois | Pas d'analytics sans consentement |
+| Tailwind config | CSS-variable tokens | `bg-bg`, `text-g2` → répondent à `[data-theme=dark]` |
+| Proxy (edge) | `proxy.ts` (Next.js 16) | RBAC + lang detection avant rendu |
 
 ---
 
-*Documentation Belo v0.1.0 — Mise à jour : Mai 2026*
+*Documentation Belo v0.1.0 — Mise à jour : Mai 2026 — 21 modèles · 304 pages SSG/ISR*
