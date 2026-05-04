@@ -28,10 +28,16 @@ const LangContext = createContext<LangContextValue | null>(null);
 
 // ── Provider ─────────────────────────────────────────────────────
 
-export function LangProvider({ children }: { children: ReactNode }) {
-  // Always start with "fr" on the server so SSR is deterministic.
-  // The useEffect below hydrates the real preference from localStorage.
-  const [lang, setLangState] = useState<Lang>("fr");
+export function LangProvider({
+  children,
+  initialLang,
+}: {
+  children:     ReactNode;
+  initialLang?: Lang;
+}) {
+  // initialLang (from URL [lang] segment) takes precedence, avoiding a
+  // flash when navigating /en/* routes. Falls back to "fr" for non-lang paths.
+  const [lang, setLangState] = useState<Lang>(initialLang ?? "fr");
 
   useEffect(() => {
     const saved = (localStorage.getItem("belo_lang") ?? "fr") as Lang;

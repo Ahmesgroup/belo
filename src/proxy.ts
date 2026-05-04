@@ -19,9 +19,38 @@ function getToken(req: NextRequest) {
   );
 }
 
+// ───────── LANGUAGE DETECTION ─────────
+const SUPPORTED_LANGS = ["fr", "en"] as const;
+
+function detectLang(req: NextRequest): "fr" | "en" {
+  // 1. Persisted preference cookie (set by LangProvider)
+  const cookie = req.cookies.get("belo_lang")?.value;
+  if (cookie === "en") return "en";
+  if (cookie === "fr") return "fr";
+
+  // 2. Accept-Language header (browser preference)
+  const accept = req.headers.get("accept-language") ?? "";
+  if (/\ben\b/.test(accept) && !/\bfr\b/.test(accept.split(",")[0])) return "en";
+
+  // 3. Default to French (Senegal primary market)
+  return "fr";
+}
+
 // ───────── PROXY (IMPORTANT) ─────────
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // ── Language routing ─────────────────────────────────────
+  // Redirect bare "/" to "/fr" or "/en" based on browser preference.
+  // Never redirect API routes, static files, or already-localised paths.
+  if (
+    pathname === "/" &&
+    !pathname.startsWith("/api") &&
+    !SUPPORTED_LANGS.some(l => pathname.startsWith(`/${l}`))
+  ) {
+    const lang = detectLang(req);
+    return NextResponse.redirect(new URL(`/${lang}`, req.url));
+  }
 
   const token = getToken(req);
   const user = token ? await verifyToken(token) : null;
