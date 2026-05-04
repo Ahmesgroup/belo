@@ -484,3 +484,40 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
   updatedBy String?
 }
+
+// ============================================================
+// EVENT LOG
+// Persistence + retry for all domain events.
+// emitEvent() writes here; cron retries failed entries.
+// ============================================================
+model EventLog {
+  id          String    @id @default(cuid())
+  type        String
+  payload     Json
+  status      String    @default("pending")  // pending | processing | processed | failed
+  retries     Int       @default(0)
+  maxRetries  Int       @default(3)
+  error       String?
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, createdAt])  // worker: WHERE status=pending ORDER BY createdAt
+  @@index([type, createdAt])    // stream: WHERE type=X AND createdAt>T
+}
+
+// ============================================================
+// ADMIN NOTIFICATION
+// Inbox for platform admins (new tenants, fraud alerts, etc.)
+// ============================================================
+model AdminNotification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  body      String?
+  tenantId  String?
+  metadata  Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([read, createdAt])
+}

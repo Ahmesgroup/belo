@@ -9,6 +9,7 @@ import { prisma } from "@/infrastructure/db/prisma";
 import { withAuth, withRole } from "@/lib/route-auth";
 import { handleRouteError } from "@/shared/errors";
 import { onSettingsUpdated } from "@/services/plan.service";
+import { emitEvent } from "@/lib/events";
 
 const ALLOWED_KEYS = [
   "maintenance_mode",
@@ -91,8 +92,12 @@ export async function PATCH(req: NextRequest) {
       },
     });
 
-    // Invalidate the in-process settings cache so the new values take effect immediately
+    // Invalidate in-process cache + emit settings.updated event (creates audit log, notifies all handlers)
     onSettingsUpdated();
+    await emitEvent("settings.updated", {
+      keys:    Object.keys(parsed.data),
+      adminId: auth.userId,
+    });
 
     return NextResponse.json({ data: { updated: Object.keys(parsed.data) } });
   } catch (err) {

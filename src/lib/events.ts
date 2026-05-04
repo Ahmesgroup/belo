@@ -1,19 +1,17 @@
 // ============================================================
-// lib/events.ts — Synchronous in-process event bus
+// lib/events.ts — In-process event bus + persistent EventLog
 //
-// Design choice: synchronous (not async queue) because:
-//  • Vercel serverless — no shared memory between requests
-//  • Side-effects (audit log, fraud check) must complete in the
-//    same request or be persisted via the outbox pattern
-//  • Errors in handlers are caught and logged, never crash the caller
+// Two responsibilities:
+//  1. Synchronous handler dispatch (immediate effects: audit logs,
+//     fraud checks) via the in-process registry.
+//  2. Non-blocking persistence to EventLog (for replay, retry,
+//     and the real-time admin stream).
 //
-// Usage:
-//   import { emitEvent } from "@/lib/events";
-//   await emitEvent("tenant.blocked", { tenantId, adminId, reason });
-//
-//   import { onEvent } from "@/lib/events";
-//   onEvent("tenant.blocked", async (p) => { ... });
+// The EventLog write is fire-and-forget: it never blocks the caller
+// and a write failure does NOT prevent handlers from running.
 // ============================================================
+
+import { prisma } from "@/infrastructure/db/prisma";
 
 // ── Typed event payloads ──────────────────────────────────────
 
@@ -21,38 +19,47 @@ export type EventPayloads = {
   "tenant.blocked":    { tenantId: string; tenantName?: string; adminId?: string; reason?: string };
   "tenant.activated":  { tenantId: string; tenantName?: string; adminId?: string };
   "tenant.suspended":  { tenantId: string; tenantName?: string; adminId?: string; reason?: string };
+  "tenant.created":    { tenantId: string; tenantName: string; ownerId: string; plan?: string };
   "plan.updated":      { plan: string; changes: Record<string, unknown>; adminId?: string; tenantCount?: number };
   "payment.failed":    { bookingId: string; tenantId: string; userId?: string; reason?: string };
   "booking.created":   { bookingId: string; tenantId: string; userId: string; priceCents: number };
   "booking.cancelled": { bookingId: string; tenantId: string; cancelledBy?: string; reason?: string };
   "fraud.detected":    { tenantId: string; tenantName?: string; riskScore: number; signals: string[] };
+  "settings.updated":  { keys: string[]; adminId?: string };
 };
 
 export type AppEvent   = keyof EventPayloads;
 type Handler<E extends AppEvent> = (payload: EventPayloads[E]) => void | Promise<void>;
 
-// ── In-process registry (lives for the lifetime of the Node.js module cache) ──
+// ── In-process registry ───────────────────────────────────────
 
 const registry = new Map<AppEvent, Array<Handler<AppEvent>>>();
 
-/**
- * Register a handler for an event type.
- * Handlers registered at module-load time persist for the warm serverless instance.
- */
 export function onEvent<E extends AppEvent>(event: E, handler: Handler<E>): void {
   const list = registry.get(event) ?? [];
   list.push(handler as Handler<AppEvent>);
   registry.set(event, list);
 }
 
+// ── Emit ──────────────────────────────────────────────────────
+
 /**
- * Emit an event and await all registered handlers sequentially.
- * A handler error is caught, logged, and skipped — it never aborts the chain.
+ * Emit an event:
+ *  1. Persists to EventLog (non-blocking, fire-and-forget)
+ *  2. Runs all registered handlers synchronously
+ *
+ * Handler errors are caught and logged — they never abort the chain.
  */
 export async function emitEvent<E extends AppEvent>(
-  event: E,
+  event:   E,
   payload: EventPayloads[E]
 ): Promise<void> {
+  // 1. Persist to EventLog — fire-and-forget, never blocks handlers
+  prisma.eventLog
+    .create({ data: { type: event, payload: payload as any, status: "pending" } })
+    .catch(err => console.error(`[EventLog] persist failed for "${event}":`, err));
+
+  // 2. Run handlers
   const handlers = registry.get(event) ?? [];
   for (const handler of handlers) {
     try {
@@ -63,7 +70,7 @@ export async function emitEvent<E extends AppEvent>(
   }
 }
 
-/** Useful for testing — clears all handlers. Never call in production code. */
+/** Useful for testing only — clears all handlers. */
 export function _clearHandlers(): void {
   registry.clear();
 }

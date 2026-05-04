@@ -8,6 +8,8 @@
 // PATCH  /api/tenants/:id  → mise à jour profil (gérant)
 // ============================================================
 
+import "@/lib/event-handlers";
+
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
@@ -16,6 +18,7 @@ import { zodErrorResponse } from "@/lib/zod-formatter";
 import { handleRouteError, AppErrors } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { getCorsHeaders } from "@/lib/cors";
+import { emitEvent } from "@/lib/events";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
@@ -229,6 +232,14 @@ export async function POST(req: NextRequest) {
 
       return { tenant };
     });
+
+    // tenant.created → triggers AdminNotification + audit log (non-blocking)
+    emitEvent("tenant.created", {
+      tenantId:   tenant.id,
+      tenantName: tenant.name,
+      ownerId:    auth.userId,
+      plan:       tenant.plan,
+    }).catch(() => {});
 
     return NextResponse.json({ data: tenant }, { status: 201 });
   } catch (err) {

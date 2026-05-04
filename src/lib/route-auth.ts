@@ -70,6 +70,48 @@ export function withTenant(
   return { ok: true };
 }
 
+// ── withActiveTenant ─────────────────────────────────────────
+// Verifies that a tenant exists, is ACTIVE, and belongs to the
+// caller. Used in booking, payment, and service routes.
+// Returns the tenant id or an error response.
+
+import { prisma } from "@/infrastructure/db/prisma";
+
+export async function withActiveTenant(
+  auth:     { ok: boolean; role?: string; tenantId?: string | null },
+  tenantId: string
+): Promise<{ ok: true; tenantId: string } | { ok: false; response: NextResponse }> {
+  const ownership = withTenant(auth, tenantId);
+  if (!ownership.ok) return ownership;
+
+  const tenant = await prisma.tenant.findUnique({
+    where:  { id: tenantId },
+    select: { id: true, status: true },
+  });
+
+  if (!tenant) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: { code: "TENANT_NOT_FOUND", message: "Salon introuvable." } },
+        { status: 404 }
+      ),
+    };
+  }
+
+  if (tenant.status !== "ACTIVE") {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: { code: "TENANT_INACTIVE", message: `Salon ${tenant.status.toLowerCase()}.` } },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { ok: true, tenantId: tenant.id };
+}
+
 // ── JWT signing ───────────────────────────────────────────────
 
 export async function signJWT(payload: { sub: string; role: string; tenantId?: string }): Promise<string> {
