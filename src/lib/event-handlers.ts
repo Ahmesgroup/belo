@@ -19,6 +19,11 @@ import { createAuditLog } from "@/lib/audit";
 import { runFraudCheck } from "@/services/fraud.service";
 import { invalidateSettingsCache } from "@/lib/settings";
 import { prisma } from "@/infrastructure/db/prisma";
+import {
+  onBookingForTrending,
+  onFavoriteForTrending,
+  onViewForTrending,
+} from "@/services/trending.service";
 
 let registered = false;
 if (!registered) {
@@ -126,6 +131,29 @@ if (!registered) {
       });
     }
     console.warn(`[Fraud] ${tenantName ?? tenantId} → ${riskScore}/100. Signals: ${signals.join(", ")}`);
+  });
+
+  // ── booking.created → trending ────────────────────────────────
+  onEvent("booking.created", async ({ tenantId }) => {
+    await onBookingForTrending(tenantId);
+  });
+
+  // ── favorite.created ──────────────────────────────────────────
+  onEvent("favorite.created", async ({ tenantId, userId }) => {
+    await onFavoriteForTrending(tenantId);
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { city: true } });
+    if (tenant?.city) {
+      await prisma.userPreference.upsert({
+        where:  { userId },
+        update: { favoriteCities: { push: tenant.city } },
+        create: { userId, favoriteCities: [tenant.city] },
+      }).catch(() => {});
+    }
+  });
+
+  // ── tenant.viewed → trending ──────────────────────────────────
+  onEvent("tenant.viewed", async ({ tenantId }) => {
+    await onViewForTrending(tenantId);
   });
 
   // ── settings.updated ─────────────────────────────────────────

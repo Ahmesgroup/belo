@@ -134,6 +134,10 @@ model Tenant {
   depositEnabled    Boolean  @default(false)
   depositPercent    Int      @default(30)  // 10-100
 
+  // Géolocalisation
+  lat               Float?
+  lng               Float?
+
   // Compte paiement principal
   waveNumber        String?
   orangeMoneyNumber String?
@@ -163,6 +167,9 @@ model Tenant {
   auditLogs    AuditLog[]
   payoutInfos  TenantPayout[]
   favorites    Favorite[]
+  metrics      TenantMetrics?
+  trending     TenantTrending?
+  adCampaigns  AdCampaign[]
 
   // INDEXES (ciblés — coût minimal)
   @@index([status])           // filtrer actifs/bloqués
@@ -209,6 +216,7 @@ model User {
   reviews     Review[]
   auditLogs   AuditLog[]
   favorites   Favorite[]
+  preference  UserPreference?
 
   // INDEXES
   @@index([tenantId])         // lister staff d'un salon
@@ -486,6 +494,82 @@ model Favorite {
 
   @@unique([userId, tenantId])
   @@index([userId])
+}
+
+// ============================================================
+// RANKING + TRENDING + ADS ENGINE
+// ============================================================
+
+model TenantMetrics {
+  id             String @id @default(cuid())
+  tenantId       String @unique
+  tenant         Tenant @relation(fields: [tenantId], references: [id])
+
+  ratingAvg      Float  @default(5.0)    // 0–5
+  conversionRate Float  @default(0.0)    // bookings / profile views
+  retentionRate  Float  @default(0.0)    // returning clients / total
+  noShowRate     Float  @default(0.0)    // no-shows / confirmed
+  responseTime   Float  @default(0.0)    // avg minutes to confirm
+
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model TenantTrending {
+  id           String @id @default(cuid())
+  tenantId     String @unique
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+
+  bookings24h  Int    @default(0)
+  views24h     Int    @default(0)
+  favorites24h Int    @default(0)
+  score        Float  @default(0.0)   // bookings*3 + views + favorites*2
+
+  updatedAt    DateTime @updatedAt
+
+  @@index([score])
+}
+
+model UserPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id])
+  favoriteCategories String[] @default([])
+  favoriteCities     String[] @default([])
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model AdCampaign {
+  id           String  @id @default(cuid())
+  tenantId     String
+  tenant       Tenant  @relation(fields: [tenantId], references: [id])
+
+  name         String
+  bidCents     Int     @default(0)    // max CPC in cents
+  budgetCents  Int     @default(0)    // daily budget
+  spentCents   Int     @default(0)    // spent today
+  targetCPA    Int?                   // target cost per acquisition (cents)
+  isActive     Boolean @default(true)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  geoBids      GeoBid[]
+
+  @@index([tenantId, isActive])
+}
+
+model GeoBid {
+  id           String     @id @default(cuid())
+  campaignId   String
+  campaign     AdCampaign @relation(fields: [campaignId], references: [id])
+  citySlug     String
+  bidModifier  Float      @default(1.0)  // 1.0 = neutral, 1.5 = +50%
+
+  @@unique([campaignId, citySlug])
 }
 
 model Country {

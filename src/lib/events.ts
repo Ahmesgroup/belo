@@ -26,6 +26,8 @@ export type EventPayloads = {
   "booking.cancelled": { bookingId: string; tenantId: string; cancelledBy?: string; reason?: string };
   "fraud.detected":    { tenantId: string; tenantName?: string; riskScore: number; signals: string[] };
   "settings.updated":  { keys: string[]; adminId?: string };
+  "favorite.created":  { tenantId: string; userId: string };
+  "tenant.viewed":     { tenantId: string; userId?: string };
 };
 
 export type AppEvent   = keyof EventPayloads;
