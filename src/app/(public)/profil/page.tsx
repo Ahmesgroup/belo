@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { PublicNav } from "@/components/ui/Nav";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Booking = { id: string; status: string; createdAt: string; service?: { name: string; priceCents: number }; slot?: { startsAt: string } };
 type Tenant  = { id: string; name: string; slug: string; city: string | null; plan: string };
@@ -12,6 +13,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function ProfilPage() {
+  const router = useRouter();
   const [tab, setTab] = useState(0);
   const [user, setUser] = useState<User | null>(null);
 
@@ -20,13 +22,19 @@ export default function ProfilPage() {
   const [salons,    setSalons]    = useState<Tenant[]>([]);
   const [sLoading,  setSLoading]  = useState(false);
 
-  // Load user from localStorage
+  // Load user from localStorage; redirect owners to dashboard
   useEffect(() => {
     try {
       const stored = localStorage.getItem("belo_user");
-      if (stored) setUser(JSON.parse(stored));
+      if (stored) {
+        const u: User = JSON.parse(stored);
+        setUser(u);
+        if (u.role === "OWNER" || u.role === "STAFF") {
+          router.replace("/dashboard");
+        }
+      }
     } catch {}
-  }, []);
+  }, [router]);
 
   // Historique: fetch bookings when tab=2
   useEffect(() => {
@@ -104,6 +112,26 @@ export default function ProfilPage() {
                   <div style={{fontSize:11,color:"var(--text3)",padding:"8px 12px",background:"rgba(255,255,255,.03)",borderRadius:8}}>
                     Rôle : <strong>{user.role}</strong>
                   </div>
+
+                  {/* CTA for CLIENT users to open their salon */}
+                  {user.role === "CLIENT" && (
+                    <Link
+                      href="/onboarding"
+                      style={{
+                        display:"flex",alignItems:"center",gap:12,marginTop:14,
+                        padding:"14px 16px",borderRadius:12,textDecoration:"none",
+                        background:"linear-gradient(135deg,rgba(13,158,110,.12),rgba(34,211,138,.06))",
+                        border:"1px solid rgba(13,158,110,.25)",
+                      }}
+                    >
+                      <span style={{fontSize:26}}>🏪</span>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:"var(--g1)",marginBottom:2}}>Ouvrir mon salon</div>
+                        <div style={{fontSize:11,color:"var(--text3)"}}>Gérez vos réservations en ligne</div>
+                      </div>
+                      <span style={{marginLeft:"auto",fontSize:16,color:"var(--g1)"}}>→</span>
+                    </Link>
+                  )}
                 </>
               ) : (
                 <div style={{textAlign:"center",padding:"20px 0",fontSize:13,color:"var(--text3)"}}>

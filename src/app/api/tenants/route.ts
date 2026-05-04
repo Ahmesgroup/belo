@@ -13,7 +13,7 @@ import "@/lib/event-handlers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma";
-import { withAuth, withRole, withTenant } from "@/lib/route-auth";
+import { withAuth, withRole, withTenant, signJWT } from "@/lib/route-auth";
 import { zodErrorResponse } from "@/lib/zod-formatter";
 import { handleRouteError, AppErrors } from "@/shared/errors";
 import { rateLimit } from "@/lib/rate-limit";
@@ -241,7 +241,20 @@ export async function POST(req: NextRequest) {
       plan:       tenant.plan,
     }).catch(() => {});
 
-    return NextResponse.json({ data: tenant }, { status: 201 });
+    // Issue fresh JWT so the client can update localStorage immediately
+    const accessToken = await signJWT({
+      sub:      auth.userId,
+      role:     "OWNER",
+      tenantId: tenant.id,
+    });
+
+    return NextResponse.json({
+      data: {
+        tenant,
+        accessToken,
+        user: { role: "OWNER", tenantId: tenant.id },
+      },
+    }, { status: 201 });
   } catch (err) {
     return handleRouteError(err);
   }
