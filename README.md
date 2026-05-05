@@ -1,7 +1,7 @@
-# Belo — Documentation technique v0.2.0
+# Belo — Documentation technique v0.3.0
 
 > SaaS beauté multi-tenant · Mise à jour : Mai 2026  
-> **21 modèles Prisma · 305 pages SSG/ISR · Next.js 16 App Router**
+> **21 modèles Prisma · 306 pages SSG/ISR · Next.js 16 App Router**
 
 ---
 
@@ -10,23 +10,32 @@
 1. [Stack technique](#1-stack-technique)
 2. [Architecture générale](#2-architecture-générale)
 3. [Modèles Prisma (21)](#3-modèles-prisma-21)
-4. [Pages & routes (305)](#4-pages--routes-305)
+4. [Pages & routes (306)](#4-pages--routes-306)
 5. [Système d'authentification](#5-système-dauthentification)
-6. [Système de téléphone (240+ pays)](#6-système-de-téléphone-240-pays)
-7. [Ranking & géolocalisation](#7-ranking--géolocalisation)
-8. [Système d'événements](#8-système-dévénements)
-9. [Détection de fraude](#9-détection-de-fraude)
-10. [i18n (fr / en)](#10-i18n-fr--en)
-11. [SEO — 224 pages SSG](#11-seo--224-pages-ssg)
-12. [Admin Panel (7 vues)](#12-admin-panel-7-vues)
-13. [Onboarding gérant](#13-onboarding-gérant)
-14. [Paiements Stripe Connect](#14-paiements-stripe-connect)
-15. [Installation locale](#15-installation-locale)
-16. [Variables d'environnement](#16-variables-denvironnement)
-17. [Structure des dossiers](#17-structure-des-dossiers)
-18. [Plans tarifaires](#18-plans-tarifaires)
-19. [Déploiement Vercel](#19-déploiement-vercel)
-20. [Bugs corrigés (historique)](#20-bugs-corrigés-historique)
+6. [Booking Engine (production-ready)](#6-booking-engine-production-ready)
+7. [Cache Engine (L1/L2/L3)](#7-cache-engine-l1l2l3)
+8. [Circuit Breaker & Retry](#8-circuit-breaker--retry)
+9. [Rate Limiting (Redis + DB)](#9-rate-limiting-redis--db)
+10. [Design System](#10-design-system)
+11. [Motion System (Framer Motion)](#11-motion-system-framer-motion)
+12. [Composants UI](#12-composants-ui)
+13. [Hooks Async UX](#13-hooks-async-ux)
+14. [Système de téléphone (240+ pays)](#14-système-de-téléphone-240-pays)
+15. [Ranking & géolocalisation](#15-ranking--géolocalisation)
+16. [Système d'événements](#16-système-dévénements)
+17. [Détection de fraude](#17-détection-de-fraude)
+18. [i18n (fr / en)](#18-i18n-fr--en)
+19. [SEO — pages locales + schema JSON-LD](#19-seo--pages-locales--schema-json-ld)
+20. [Analytics & funnel tracking](#20-analytics--funnel-tracking)
+21. [Admin Panel (7 vues)](#21-admin-panel-7-vues)
+22. [Onboarding gérant](#22-onboarding-gérant)
+23. [Paiements Stripe Connect](#23-paiements-stripe-connect)
+24. [Installation locale](#24-installation-locale)
+25. [Variables d'environnement](#25-variables-denvironnement)
+26. [Structure des dossiers](#26-structure-des-dossiers)
+27. [Plans tarifaires](#27-plans-tarifaires)
+28. [Déploiement Vercel](#28-déploiement-vercel)
+29. [Bugs corrigés (historique)](#29-bugs-corrigés-historique)
 
 ---
 
@@ -37,12 +46,14 @@
 | Framework | **Next.js 16** App Router (Turbopack) |
 | Base de données | **PostgreSQL Neon** (serverless, scale-to-zero) |
 | ORM | **Prisma 5.22** |
+| Cache | **LRU in-memory** (L1) + **Upstash Redis** (L2) + DB fallback (L3) |
 | Auth | OTP WhatsApp + **JWT HS256** (jose, edge-compatible) |
 | Paiements | **Stripe Connect** (marketplace) · Wave · Orange Money |
 | Notifications | WhatsApp Cloud API (Meta) |
 | Stockage | Cloudflare R2 |
 | Hosting | **Vercel** (cron jobs intégrés) |
-| CSS | **Tailwind CSS v4** + CSS variables (dark/light) |
+| CSS | **Tailwind CSS v3** + CSS variables (dark/light) |
+| Animations | **Framer Motion 12** — système MOTION figé |
 | TypeScript | Strict mode — aucun `any` non justifié |
 
 ---
@@ -53,7 +64,7 @@
                         ┌─────────────────────────────────┐
                         │         proxy.ts (Edge)         │
                         │  auth guard · i18n redirect     │
-                        │  role check · JWT verify        │
+                        │  rate limit · JWT verify        │
                         └──────────────┬──────────────────┘
                                        │
               ┌────────────────────────┼────────────────────────┐
@@ -65,6 +76,11 @@
      └──────────┬────┘      └──────────┬──────┘      └───────────────┘
                 │                      │
      ┌──────────▼────────────────────────────────────────────┐
+     │                Cache Engine (L1 → L2 → L3)             │
+     │   LRU in-memory (5s) · Upstash Redis (60s) · DB fetch  │
+     └──────────────────────────┬────────────────────────────┘
+                                │
+     ┌──────────────────────────▼────────────────────────────┐
      │                    Services Layer                      │
      │  booking.service · ranking.service · trending.service  │
      │  fraud.service · plan.service · geocode               │
@@ -78,14 +94,16 @@
 
 ### Proxy (middleware Next.js 16)
 
-Le fichier `src/proxy.ts` est détecté automatiquement par Next.js 16 comme proxy middleware. Il gère :
+`src/proxy.ts` est détecté automatiquement par Next.js 16 comme proxy middleware. Il gère :
 
-- **Redirection langue** : `/` → `/fr` ou `/en` (cookie `belo_lang` → Accept-Language → défaut `fr`)
-- **Guard admin** : `/admin/*` → rôles ADMIN, SUPER_ADMIN uniquement
+- **Redirection langue** : `/` → `/fr` ou `/en`
+- **Guard admin** : `/admin/*` → rôles ADMIN, SUPER_ADMIN
 - **Guard dashboard** : `/dashboard/*` → rôles OWNER, STAFF, ADMIN, SUPER_ADMIN
 - **Guard profil** : `/profil` → utilisateur connecté requis
+- **Rate limit global** : `/api/*` → 100 req/min par identité (userId > cookie > IP)
+- **Rate limit bookings** : `POST /api/bookings` → 5 créations / 10 s
 
-> ⚠️ Ne pas créer de `middleware.ts` : Next.js 16 détecte `proxy.ts` nativement et les deux fichiers entrent en conflit.
+> ⚠️ Ne pas créer de `middleware.ts` : conflit avec `proxy.ts` en Next.js 16.
 
 ---
 
@@ -97,11 +115,11 @@ Le fichier `src/proxy.ts` est détecté automatiquement par Next.js 16 comme pro
 | `Tenant` | Salon — slug unique, lat/lng, plan, statut |
 | `Service` | Prestation d'un salon (catégorie, prix, durée, photos) |
 | `Slot` | Créneau horaire généré par cron |
-| `Booking` | Réservation (statut, acompte, paiement) |
+| `Booking` | Réservation (statut, acompte, paiement, idempotencyKey unique) |
 | `Review` | Avis lié à une réservation (1:1) |
-| `NotificationLog` | Log WhatsApp/SMS envoyés |
+| `NotificationLog` | Log WhatsApp/SMS envoyés (outbox pattern) |
 | `FraudAlert` | Alertes fraude (6 signaux, score 0-100) |
-| `AuditLog` | Journal d'audit exhaustif |
+| `AuditLog` | Journal d'audit exhaustif + Dead Letter Queue |
 | `EventLog` | Queue d'événements asynchrones (SKIP LOCKED) |
 | `AdminNotification` | Inbox admin (nouveaux salons, fraudes) |
 | `TenantMetrics` | Métriques dénormalisées (rating, conversion, rétention) |
@@ -118,17 +136,28 @@ Le fichier `src/proxy.ts` est détecté automatiquement par Next.js 16 comme pro
 ### Indexes clés
 
 ```prisma
-@@index([status])           // Tenant — filtrer actifs
-@@index([plan, status])     // Tenant — listing par plan
-@@index([lat, lng])         // Tenant — requêtes géospatiales Haversine
-@@index([tenantId, startsAt]) // Slot — disponibilités
-@@index([userId, status])   // Booking — historique client
+@@index([status])              // Tenant — filtrer actifs
+@@index([plan, status])        // Tenant — listing par plan
+@@index([lat, lng])            // Tenant — requêtes géospatiales Haversine
+@@index([tenantId, startsAt])  // Slot — disponibilités
+@@index([userId, status])      // Booking — historique client
 @@index([status, processedAt]) // EventLog — queue SKIP LOCKED
 ```
 
+### Index partiel anti double-booking (migration `20260508000000`)
+
+```sql
+-- Garantie DB : au plus 1 booking actif par slot
+CREATE UNIQUE INDEX "unique_active_booking_per_slot"
+    ON "Booking" ("slotId")
+    WHERE status IN ('PENDING', 'CONFIRMED');
+```
+
+> L'ancien `@@unique([slotId, status])` permettait PENDING + CONFIRMED de coexister. L'index partiel est la seule garantie correcte.
+
 ---
 
-## 4. Pages & routes (305)
+## 4. Pages & routes (306)
 
 ### Pages statiques (SSG)
 
@@ -138,6 +167,7 @@ Le fichier `src/proxy.ts` est détecté automatiquement par Next.js 16 comme pro
 | `/fr/for-salons`, `/en/for-salons` | SSG | 1h |
 | `/fr/plans`, `/en/plans` | SSG | 5 min |
 | `/fr/salons/[city]/[category]` × 224 | SSG | 10 min |
+| `/[city]/[category]` (Phase 1 : Dakar) | SSG | ISR |
 
 ### Pages dynamiques (SSR)
 
@@ -151,7 +181,7 @@ Le fichier `src/proxy.ts` est détecté automatiquement par Next.js 16 comme pro
 ### API Routes
 
 ```
-GET  /api/tenants          → listing (public, cache 2min)
+GET  /api/tenants          → listing (cache L1+L2, TTL 60s)
 POST /api/tenants          → créer salon + upgrade OWNER
 GET  /api/tenants/[slug]   → profil salon (cache 5min)
 PATCH /api/tenants/[id]    → modifier profil (gérant/admin)
@@ -160,7 +190,8 @@ POST /api/auth?action=send-otp    → envoi OTP WhatsApp
 POST /api/auth?action=verify-otp  → vérification + JWT
 
 GET  /api/bookings         → liste réservations
-POST /api/bookings         → créer réservation
+POST /api/bookings         → créer réservation (idempotent)
+PATCH /api/bookings        → accept/refuse (gérant)
 
 GET  /api/slots            → créneaux disponibles
 POST /api/slots            → créer créneaux (gérant)
@@ -216,13 +247,13 @@ PATCH /api/admin/settings  → config plateforme
 ### Guard côté client (`src/lib/auth-client.ts`)
 
 ```typescript
-getToken()         // JWT depuis localStorage
-getUser()          // BeloUser depuis localStorage
+getToken()           // JWT depuis localStorage
+getUser()            // BeloUser depuis localStorage
 setAuth(token, user) // persiste token + user
-clearAuth()        // logout
-isOwner()          // OWNER ou STAFF
-isAdmin()          // SUPER_ADMIN ou ADMIN
-authHeaders()      // { Authorization: "Bearer ..." }
+clearAuth()          // logout
+isOwner()            // OWNER ou STAFF
+isAdmin()            // SUPER_ADMIN ou ADMIN
+authHeaders()        // { Authorization: "Bearer ..." }
 ```
 
 ### Guard côté serveur (`src/lib/route-auth.ts`)
@@ -235,186 +266,492 @@ withActiveTenant(auth, tenantId)  // vérifie ACTIVE + ownership
 signJWT({ sub, role, tenantId })  // signe un nouveau JWT
 ```
 
-### Upgrade CLIENT → OWNER
-
-Lors de la création d'un salon (`POST /api/tenants`), la transaction Prisma :
-1. Crée le `Tenant`
-2. Met à jour `User.role = "OWNER"` et `User.tenantId`
-3. Retourne un **nouveau JWT** avec `role: "OWNER"` dans la réponse
-4. Le client appelle `setAuth(newToken, updatedUser)` → localStorage mis à jour immédiatement
-5. Redirect vers `/dashboard` sans re-login
-
 ---
 
-## 6. Système de téléphone (240+ pays)
+## 6. Booking Engine (production-ready)
 
-### `src/lib/phone.ts`
+### Défense en profondeur — 4 couches anti double-booking
 
-**240+ pays** organisés : Afrique en premier (marché primaire), puis Europe, Amériques, Moyen-Orient, Asie, Océanie.
+```
+Couche 1 : Domain rules    — validateBookingCreation() pure, fail fast
+Couche 2 : SELECT FOR UPDATE — Tenant lock PUIS Slot lock (ordre constant)
+Couche 3 : Double-check    — findFirst après lock dans la transaction
+Couche 4 : Index partiel DB — UNIQUE (slotId) WHERE status IN ('PENDING','CONFIRMED')
+```
+
+### Ordre des locks (deadlock-free)
+
+```
+Toujours : Tenant (lock 1) → Slot (lock 2)
+Jamais inverser cet ordre.
+```
+
+### Timeouts de lock
 
 ```typescript
-interface Country {
-  iso:      string;   // "SN", "LU", "FR"...
-  dial:     string;   // "221", "352", "33" (sans +)
-  flag:     string;   // emoji drapeau
-  name:     string;   // nom anglais
-  nameFr:   string;   // nom français
-  pattern?: RegExp;   // validation locale optionnelle
-  example?: string;   // placeholder
+// Dans la transaction — empêche de tenir des locks indéfiniment
+await tx.$executeRaw`SET LOCAL lock_timeout = '2s'`;
+await tx.$executeRaw`SET LOCAL statement_timeout = '5s'`;
+```
+
+### Idempotency
+
+```typescript
+// 1. Fast-path avant la transaction (optimiste)
+const existing = await prisma.booking.findUnique({ where: { idempotencyKey } });
+if (existing) return existing;
+
+// 2. P2002 après transaction → distingue les deux cas
+} catch (err) {
+  if (isPrismaP2002(err)) {
+    const idempotent = await prisma.booking.findUnique({ where: { idempotencyKey } });
+    if (idempotent) return idempotent;  // clé en collision → réponse idempotente
+    throw new AppError("SLOT_TAKEN", "...");  // index slot → créneau pris
+  }
 }
 ```
 
-**Fonctions clés :**
+### Plan limit race condition (fix)
+
+Sans le lock tenant, deux requêtes concurrentes à `bookingsUsedMonth = 499` (limite 500) peuvent toutes les deux passer la vérification et dépasser le plan. Le `FOR UPDATE` sur le Tenant serialise les accès.
+
+---
+
+## 7. Cache Engine (L1/L2/L3)
+
+### Architecture triple couche
+
+```
+L1 : LRU in-memory    TTL ~5 s    (par instance, 0 ms de latence)
+L2 : Upstash Redis    TTL 30–120s (distribué entre instances)
+L3 : DB fetcher       Fallback toujours disponible
+```
+
+### `src/lib/cache-engine.ts`
+
+```typescript
+CacheEngine.get(key, fetcher, { ttl: 60 })
+// L1 hit → ~0ms | L2 hit → ~5ms | L3 → DB + write-through
+
+CacheEngine.invalidate(key)
+// Supprime L1 + L2
+
+CacheEngine.invalidatePattern("belo:tenants:*")
+// Clear L1 + DEL Redis par pattern (SCAN O(N) — OK phase 1)
+```
+
+### Patterns implémentés
+
+| Pattern | Détail |
+|---------|--------|
+| **Stale-While-Revalidate** | Retourne stale immédiatement + revalide en background |
+| **Anti-thundering herd** | `SET NX` lock + jitter 50–150 ms avant fetch L3 |
+| **Versioning** | `minVersion` pour read-after-write consistency |
+| **safeParse** | Désérialisation explicite avec logging — `get<string>` + `JSON.parse` |
+
+### `src/lib/lru-cache.ts`
+
+LRU 500 entrées max, TTL par entrée, singleton `globalThis` (survit aux hot-reloads).
+
+### `src/lib/redis.ts`
+
+Client Upstash REST. Si `UPSTASH_REDIS_REST_URL` / `TOKEN` vides → `redis = null` → mode DB-only sans erreur. Ping de vérification en développement.
+
+### Cache sur `GET /api/tenants`
+
+Clé = `belo:tenants:{city}:{plan}:{category}:{search}:{page}:{pageSize}` — chaque combinaison unique est cachée. Invalidé automatiquement après `POST /api/tenants`.
+
+---
+
+## 8. Circuit Breaker & Retry
+
+### `src/lib/circuit-breaker.ts`
+
+```
+CLOSED  → < 5 failures → exécution normale
+OPEN    → ≥ 5 failures → fallback immédiat (30s cooldown)
+HALF-OPEN → 1 requête test → succès = CLOSED | échec = OPEN
+```
+
+Les erreurs métier (`SLOT_TAKEN`, `UNAUTHORIZED`, `NOT_FOUND`, etc.) **ne déclenchent pas** le breaker — seules les pannes infrastructure comptent.
+
+```typescript
+const { data, degraded } = await withCircuitBreaker(
+  "neon-db",
+  () => fetchData(),
+  fallbackData,
+);
+```
+
+### `src/lib/retry-engine.ts`
+
+Stratégie **Full Jitter** (AWS 2015) — `delay = random(0, min(maxDelay, base × 2^attempt))`.
+
+```typescript
+// Retry simple
+await withRetry(fn, { maxAttempts: 3, baseDelayMs: 100 });
+
+// Retry + Dead Letter Queue automatique
+await withRetryAndDLQ("job.type", payload, fn, { maxAttempts: 3 });
+```
+
+### Dead Letter Queue
+
+Les jobs échoués après tous les retries sont persistés dans `AuditLog` avec `action = "dlq:*"`. Consultables via le panel admin (vue Logs, filtre `dlq`).
+
+---
+
+## 9. Rate Limiting (Redis + DB)
+
+### `src/lib/rate-limit.ts`
+
+**Identité multi-critères** (par ordre de priorité) :
+```
+userId authentifié > session cookie (hash 8 octets) > IP > "unknown"
+```
+
+**Backend Redis** : sliding window via `ZADD + ZCARD` — pas de burst au reset de fenêtre.
+
+**Backend DB** : fixed window via `AuditLog` — fallback si Redis absent.
+
+```typescript
+rateLimit(req, { max: 100, windowMs: 60_000 })
+// Utilisé par proxy.ts sur /api/*
+
+rateLimitByKey("booking:user:123", { max: 5, windowMs: 10_000 })
+// Clé arbitraire pour POST /api/bookings
+
+rateLimitByPhone("+221771234567", { max: 3, windowMs: 120_000 })
+// OTP : clé = numéro de téléphone (anti-DoS par IP partagée)
+```
+
+### Quotas configurés
+
+| Endpoint | Limite | Fenêtre |
+|----------|--------|---------|
+| `/api/*` global | 100 req | 1 min |
+| `POST /api/bookings` | 5 req | 10 s |
+| OTP send | 3 req | 2 min |
+| OTP verify | 5 req | 15 min |
+| `POST /api/tenants` | 5 req | 1 h |
+
+---
+
+## 10. Design System
+
+### Intent System — `src/lib/design/intent.ts`
+
+**RÈGLE ABSOLUE : Le vert `#1DB954` n'existe que sous ces intentions. Jamais en décoration.**
+
+```typescript
+type Intent = "cta" | "success" | "confirm" | "neutral" | "muted" | "error";
+
+getIntentColor(intent)  // → "#1DB954" | "#0A0A0A" | "#6B7280" | "#DC2626"
+getIntentBg(intent)     // → tinte à 10% d'opacité pour les surfaces
+```
+
+### Tokens Tailwind — `tailwind.config.ts`
+
+```typescript
+colors: {
+  intent: {
+    cta:     "#1DB954",
+    success: "#1DB954",
+    confirm: "#1DB954",
+    error:   "#DC2626",
+    neutral: "#0A0A0A",
+    muted:   "#6B7280",
+  }
+}
+// Usage : bg-intent-cta, text-intent-error, border-intent-muted
+```
+
+### ESLint Guards — `.eslintrc.js`
+
+```javascript
+// Interdit dans le code produit :
+// 1. Hex colors directes dans les styles inline
+// 2. Durées d'animation hardcodées (utiliser MOTION.duration.*)
+// 3. Courbes easing inline (utiliser MOTION.easing)
+```
+
+Exemption automatique pour `src/lib/motion/*.ts` et `src/lib/design/*.ts`.
+
+---
+
+## 11. Motion System (Framer Motion)
+
+### `src/lib/motion/motion.ts`
+
+**@frozen — Ne pas modifier sans validation équipe.**
+
+```typescript
+export const MOTION = {
+  easing:   [0.22, 1, 0.36, 1],  // Seule courbe dans tout le projet
+  duration: {
+    micro:  0.15,  // tap feedback — imperceptible
+    ui:     0.22,  // transitions UI
+    layout: 0.3,   // shared elements
+  },
+  scale: {
+    tap:   0.96,
+    press: 0.98,
+  },
+  translate: {
+    enterY: 12,
+    exitY:  -8,
+  },
+} as const;
+```
+
+### `src/lib/motion/presets.ts`
+
+Variants Framer Motion prêts à l'emploi. **Importer ces presets — jamais définir de Variants inline.**
+
+| Preset | Usage |
+|--------|-------|
+| `tap` | `whileTap` sur tout élément cliquable |
+| `press` | État "maintenu pressé" |
+| `fadeIn` | Entrée par opacité |
+| `slideUp` | Entrée depuis le bas (cards, modals) |
+| `staggerContainer` | Parent d'une liste animée |
+| `staggerItem` | Enfant du staggerContainer |
+| `ctaFeedback` | Bouton CTA avec micro spring |
+
+### Règle motion
+
+> **Si l'utilisateur remarque l'effet → trop fort.**  
+> Motion = feedback invisible, jamais décoration.
+
+---
+
+## 12. Composants UI
+
+### `src/components/motion/MotionTap.tsx`
+
+Wrapper universel pour tout élément tappable. Garantit tap feedback < 100ms.
+
+```tsx
+<MotionTap onClick={handler} className="..." style={...}>
+  {children}
+</MotionTap>
+```
+
+### `src/components/ui/Button.tsx`
+
+```tsx
+<Button intent="cta" size="md" variant="filled" onClick={...}>
+  Réserver
+</Button>
+// intent: "cta" | "confirm"
+// size: "sm" | "md" | "lg"
+// variant: "filled" | "ghost"
+```
+
+Aucune couleur hardcodée — tout passe par `getIntentColor(intent)`.
+
+### `src/components/ui/StatusBadge.tsx`
+
+```tsx
+<StatusBadge status="confirmed" size="sm" />
+// confirmed → intent success (vert)
+// pending   → intent muted (gris)
+// cancelled → intent error (rouge)
+// 1 seul signal couleur par badge
+```
+
+### `src/components/home/SalonHero.tsx`
+
+- Scroll horizontal snap-x mandatory
+- Cards `85vw × 400px`, `borderRadius: 24px`
+- Gradient overlay dark pour lisibilité texte
+- Badge rating glass effect (backdrop-blur)
+- **Micro-parallax** `y: [0, -20]` via `useScroll + useTransform`
+- Images Next.js avec `priority` et `placeholder="blur"` (hero uniquement)
+- Stagger à l'entrée
+
+### `src/components/home/SalonList.tsx`
+
+- `staggerContainer` + `staggerItem` sur chaque card
+- Layout `"horizontal"` (snap scroll) ou `"vertical"`
+- 1 seul signal couleur par card : la disponibilité
+
+### `src/components/bookings/BookingCard.tsx`
+
+Hiérarchie visuelle stricte :
+```
+titre     → noir (text)
+prix      → noir bold (text)
+statut    → couleur (1 seul signal via StatusBadge)
+meta      → gris (text3)
+```
+
+3 actions : Détails | Message | Annuler (selon disponibilité).
+
+### `src/components/checkout/Receipt.tsx`
+
+- Background `#0A0A0A` (dark card)
+- Check circle vert — **sans glow effect**
+- Séparateur `border-dashed`
+- Total en `getIntentColor("success")`
+- 2 CTA : "Contacter salon" + "Rebook"
+
+### `src/components/ui/BottomNav.tsx`
+
+- 4 tabs : Accueil, Recherche, Réservations, Profil
+- Dot actif vert avec `layoutId` (animation fluide entre tabs)
+- `paddingBottom: env(safe-area-inset-bottom)` — **critique iPhone**
+- `backdrop-blur-xl` sur fond blanc semi-transparent
+
+---
+
+## 13. Hooks Async UX
+
+### `src/hooks/useAsyncAction.ts`
+
+Socle de tout état async dans Belo. 7 protections obligatoires :
+
+```typescript
+const { execute, status, error, isLoading, isSuccess, isError } =
+  useAsyncAction(fn, { timeoutMs: 10_000, softSuccessMs: 1_200 });
+```
+
+| Protection | Implémentation |
+|-----------|----------------|
+| Double-click bloqué | `if (status === "loading") return null` |
+| Timeout 10 s auto-error | `Promise.race([fn(), timeoutPromise])` |
+| Pas de setState unmount | `mounted.current` ref |
+| Cleanup timers | `safeTimeout` avec Set de timers + cleanup useEffect |
+| Soft success | Reset idle après `softSuccessMs` (1 200 ms) |
+
+### `src/hooks/useBookingAction.ts`
+
+Étend useAsyncAction avec :
+
+```typescript
+const { execute, status, error } = useBookingAction();
+await execute({ tenantId, serviceId, slotId, phone });
+```
+
+**AbortController** — annule la requête précédente à chaque `execute()`. Les `AbortError` sont ignorés silencieusement.
+
+**Idempotency Key** — règle critique :
+```
+La clé NE SE RESET PAS sur erreur.
+Un retry doit envoyer la MÊME clé.
+Reset UNIQUEMENT après succès confirmé.
+Violer = double booking possible.
+```
+
+**SLOT_TAKEN** → message actionnable "Ce créneau vient d'être pris. Choisissez un autre horaire." (conversion préservée).
+
+### `src/components/booking/BookingButton.tsx`
+
+```tsx
+<BookingButton status={status} onClick={execute} fullWidth />
+```
+
+États visuels :
+```
+idle    → "Réserver"           (vert #1DB954)
+loading → "Réservation..." + spinner (gris)
+success → "Confirmé ✓"         (vert, 1 200ms puis reset)
+error   → "Réessayer"          (rouge)
+```
+
+**Jamais de succès visuel avant réponse DB confirmée.**
+
+---
+
+## 14. Système de téléphone (240+ pays)
+
+### `src/lib/phone.ts`
+
+240+ pays : Afrique en premier (marché primaire), Europe, Amériques, Moyen-Orient, Asie, Océanie.
 
 ```typescript
 toE164(dial, local)
-// Protège contre le double indicatif :
-// toE164("221", "+221 77 123 456") → "+22177123456" ✓
-// toE164("221", "77 123 456")      → "+22177123456" ✓
+// Anti double-indicatif : si local commence déjà par le dial code, ne pas le réajouter
+// toE164("221", "+221 77...") → "+22177..." ✓
+// toE164("221", "77 123 456") → "+22177123456" ✓
 
 normalizePhone(raw, dialDefault)
-// Normalise n'importe quel format en E.164
-
 isValidLocalNumber(local, country)
-// Valide par regex si country.pattern existe, sinon par longueur
-
-splitE164(e164)
-// → { country: Country, local: string }
-
-detectDefaultCountry()
-// navigator.language → ISO region → fallback Sénégal
-
-findCountryByISO("LU")  // → Luxembourg
-findCountryByDial("352") // → Luxembourg
-```
-
-**Exemples pays clés :**
-
-```typescript
-{ iso:"SN", dial:"221", flag:"🇸🇳", pattern:/^[5-9]\d{7,8}$/ }
-{ iso:"LU", dial:"352", flag:"🇱🇺", pattern:/^\d{6,9}$/ }
-{ iso:"FR", dial:"33",  flag:"🇫🇷", pattern:/^[67]\d{8}$/ }
-{ iso:"BE", dial:"32",  flag:"🇧🇪", pattern:/^[4-9]\d{7,8}$/ }
+splitE164(e164) → { country, local }
+detectDefaultCountry() → navigator.language → fallback SN
+findCountryByISO("LU") → Luxembourg
+findCountryByDial("352") → Luxembourg
 ```
 
 ### `src/components/ui/PhoneInput.tsx`
 
-- Dropdown avec recherche (nom FR, nom EN, code ISO, indicatif)
-- Recherche `+352` → strip `+` → compare `"352"` → trouve Luxembourg
-- Validation live ✓ / ✗ avec indicateur visuel
-- Placeholder dynamique (`country.example`)
-- ARIA-compliant (aria-invalid, aria-selected, role="listbox", role="option")
-- Aucune possibilité de double indicatif (input filtre les digits bruts)
+- Dropdown recherchable (nom FR, EN, ISO, indicatif)
+- Recherche `"+352"` → strip `+` → `"352"` → Luxembourg ✓
+- Validation live avec indicateur visuel
+- ARIA-compliant (aria-invalid = `"true"/"false"` en string)
 
 ---
 
-## 7. Ranking & géolocalisation
+## 15. Ranking & géolocalisation
 
 ### Geocoding (`src/services/geocode.ts`)
 
-À chaque création de salon :
-
 ```
-1. Requête Nominatim (OpenStreetMap) — timeout 4s
-2. Fallback coordonnées ville (table CITY_COORDS locale)
-3. Fallback partial match (slug)
+1. Nominatim (OpenStreetMap) — timeout 4s
+2. Fallback CITY_COORDS locale (table de 15 villes)
+3. Partial match sur le slug
 4. Défaut absolu : Dakar (14.7167, -17.4677)
 ```
 
-`lat` et `lng` sont **toujours renseignés** — jamais `null`. Cela garantit que les requêtes SQL Haversine ne retournent pas d'erreur.
+`lat` et `lng` toujours renseignés — garantit que les requêtes Haversine fonctionnent.
 
-### Formule de ranking (6 facteurs)
+### Formule ranking (6 facteurs)
 
 ```
 score = relevance×0.25 + distance×0.20 + performance×0.20
       + personalization×0.20 + business×0.10 + freshness×0.05
 ```
 
-| Facteur | Calcul |
-|---------|--------|
-| `relevance` | Fulltext match nom/adresse |
-| `distance` | Haversine SQL depuis lat/lng utilisateur |
-| `performance` | ratingAvg · bookingCount · conversionRate |
-| `personalization` | Historique + favoris de l'utilisateur |
-| `business` | Plan (PREMIUM > PRO > FREE) · AdCampaign boost |
-| `freshness` | Activité des 30 derniers jours |
-
 ```typescript
-// src/services/ranking.service.ts
-searchRanked(params: {
-  lat?: number; lng?: number;
-  city?: string; query?: string;
-  category?: string; userId?: string;
-  page?: number; pageSize?: number;
-}) → Promise<RankedTenant[]>
+searchRanked({ lat, lng, city, query, category, userId, page, pageSize })
+→ Promise<RankedTenant[]>
 ```
 
 ---
 
-## 8. Système d'événements
+## 16. Système d'événements
 
 Architecture event-driven synchrone (sans Redis).
 
-### `src/lib/events.ts`
-
 ```typescript
-emitEvent(type, payload)   // fire-and-forget, persiste dans EventLog
+emitEvent(type, payload)   // fire-and-forget + persistance EventLog
 onEvent(type, handler)     // enregistre un handler
 ```
 
-### Types d'événements
+Types : `booking.created`, `booking.confirmed`, `booking.cancelled`, `tenant.created`, `tenant.viewed`, `favorite.created`, `settings.updated`, `fraud.detected`
 
-```typescript
-"booking.created"    → AdminNotification + WhatsApp confirmation
-"booking.confirmed"  → WhatsApp au client + mise à jour trending
-"booking.cancelled"  → WhatsApp client + libère le slot
-"tenant.created"     → AdminNotification validation requise
-"tenant.viewed"      → incrément TenantTrending.views
-"favorite.created"   → incrément TenantTrending.score
-"settings.updated"   → invalidation cache settings
-"fraud.detected"     → AdminNotification urgente
-```
-
-### Queue de retry (`src/lib/event-queue.ts`)
-
-`GET /api/cron/events` — exécuté toutes les minutes sur Vercel :
-
-```sql
-SELECT * FROM EventLog
-WHERE status = 'PENDING' AND processedAt IS NULL
-ORDER BY createdAt ASC
-LIMIT 50
-FOR UPDATE SKIP LOCKED
-```
-
-Retry exponentiel : 3 tentatives max, délai ×2 à chaque échec.
+Queue de retry via `SELECT FOR UPDATE SKIP LOCKED` — 3 tentatives max, délai ×2.
 
 ---
 
-## 9. Détection de fraude
+## 17. Détection de fraude
 
 ### `src/services/fraud.service.ts`
-
-6 signaux analysés à chaque réservation :
 
 | Signal | Seuil | Score |
 |--------|-------|-------|
 | Réservations rapides (< 10min) | > 5 | +20 |
 | Multi-numéros même IP | > 3 | +25 |
 | Taux no-show | > 40% | +20 |
-| Réservations cross-tenant | > 10 | +30 |
-| Fréquence IP anormale | > 20/h | +15 |
-| Comportement suspect (montant) | > 100k FCFA | +10 |
+| Cross-tenant | > 10 | +30 |
+| Fréquence IP | > 20/h | +15 |
+| Montant suspect | > 100k FCFA | +10 |
 
-- Score ≥ 80 → **blocage automatique** + AdminNotification
-- Score 50-79 → alerte `UNDER_REVIEW`
-- Score < 50 → log uniquement
+Score ≥ 80 → blocage auto. Score 50-79 → `UNDER_REVIEW`. Score < 50 → log.
 
 ---
 
-## 10. i18n (fr / en)
-
-### Routing URL
+## 18. i18n (fr / en)
 
 ```
 /fr           → landing page français
@@ -424,145 +761,136 @@ Retry exponentiel : 3 tentatives max, délai ×2 à chaque échec.
 /fr/plans     → tarifs FR
 ```
 
-### `src/lib/i18n.ts`
+`getTranslations("fr")` côté serveur. `useLang()` côté client. 5 namespaces : `common`, `booking`, `dashboard`, `for_salons`, `plans`.
 
-Fichier unique de traductions (fr + en) pour 5 namespaces :
-`common`, `booking`, `dashboard`, `for_salons`, `plans`
+Détection langue dans `proxy.ts` : cookie `belo_lang` → Accept-Language → défaut `fr`.
 
-### Côté serveur (`src/lib/i18n-server.ts`)
+---
 
-```typescript
-const t = getTranslations("fr");
-t("hero_title")           // flat key
-t("booking.how_title")    // namespaced key
+## 19. SEO — pages locales + schema JSON-LD
+
+### Pages `[lang]/salons/[city]/[category]` — 224 pages
+
+```
+2 langues × 14 villes × 8 catégories = 224 pages SSG (revalidate: 10min)
 ```
 
-### Côté client (`src/lib/lang-context.tsx`)
+### Pages `/[city]/[category]` — SEO local (phase 1)
+
+Route group `(city-seo)` pour éviter le conflit avec `[lang]`. URLs : `/dakar/coiffeur`, `/dakar/barber`, etc.
+
+```typescript
+// Générées uniquement si salons >= 3 actifs (évite les pages fines)
+export async function generateStaticParams() {
+  // Phase 1 : Dakar uniquement
+  // Phase 2 : expansion autres villes
+}
+```
+
+Guard : si `city` est un code langue (`fr`, `en`, `ar`, `wo`) → `notFound()`.
+
+### Schema JSON-LD — règle absolue
+
+```typescript
+/**
+ * RÈGLE ABSOLUE SEO
+ * Aucune donnée fictive dans le schema.
+ * Pas de fallback. Pas de valeur par défaut.
+ * Absence > mensonge.
+ * Google croise avec Maps et autres sources.
+ */
+
+function buildRatingSchema(salon) {
+  // Minimum 5 bookings pour afficher un rating
+  if (!salon.rating || salon.reviewCount < 5) return undefined;
+  return { "@type": "AggregateRating", ratingValue, reviewCount };
+}
+```
+
+Schema par salon : `BeautySalon` + `PostalAddress` + `AggregateRating` (si ≥5) + `hasOfferCatalog` avec prix réels en XOF.
+
+### Slots dynamiques
 
 ```tsx
-<LangProvider initialLang="fr">
-  <App />
-</LangProvider>
-
-// Dans les composants :
-const { t, lang } = useLang();
-```
-
-### Détection de langue (`src/proxy.ts`)
-
-```
-1. Cookie belo_lang (préférence persistée)
-2. En-tête Accept-Language
-3. Défaut : "fr" (marché primaire Sénégal)
+<Suspense fallback={<SlotsSkeleton />}>
+  <SalonListSeoClient city={city} category={category} />
+</Suspense>
+// Slots = dynamiques (temps réel, non bloquants)
+// Page = statique (SSG + ISR)
 ```
 
 ---
 
-## 11. SEO — 224 pages SSG
+## 20. Analytics & funnel tracking
 
-Générées avec `generateStaticParams()` :
-
-```
-/[lang]/salons/[city]/[category]
-= 2 langues × 14 villes × 8 catégories = 224 pages
-```
-
-**Villes** : Dakar, Thiès, Ziguinchor, Saint-Louis, Kaolack, Touba, Mbour, Rufisque, Kolda, Tambacounda, Abidjan, Douala, Paris, Lyon
-
-**Catégories** : hair, nails, massage, spa, beauty, barber, makeup, waxing
-
-Chaque page a :
-- `<title>` et `<meta description>` générés dynamiquement
-- `canonical` + `hreflang` (fr ↔ en)
-- Données Prisma en direct (SSG avec `revalidate: 600`)
-- **OpenGraph** et **Twitter Card**
-
----
-
-## 12. Admin Panel (7 vues)
-
-Route : `/admin` — accès ADMIN et SUPER_ADMIN uniquement.
-
-| Vue | Données affichées |
-|-----|-------------------|
-| Mission Control | Stats temps réel : salons, bookings, revenus, fraudes |
-| Tenants | Liste tous les salons, filtre par statut/plan, actions approve/block |
-| Plans | Gestion des plans tarifaires, sync quotas |
-| Fraude | Alertes fraude avec score et signaux détaillés |
-| Équipe | Membres de l'équipe plateforme |
-| Logs | Journal d'audit complet (filtrable) |
-| Réglages | Config plateforme (maintenance mode, fees, limits) |
-
-Toutes les données sont **réelles** (Prisma direct, pas de mock).
-
----
-
-## 13. Onboarding gérant
-
-### Flow complet
-
-```
-CLIENT se connecte (/login)
-    ↓
-Profil (/profil) → CTA "Ouvrir mon salon" (visible si role=CLIENT)
-    ↓
-Onboarding (/onboarding) — 4 étapes :
-  1. Nom du salon + description
-  2. Adresse + ville + pays
-  3. Téléphone + WhatsApp + email
-  4. Catégorie principale
-    ↓
-POST /api/tenants
-  → normalise phone en E.164
-  → géocode l'adresse (Nominatim + fallback)
-  → transaction : crée Tenant + upgrade User OWNER
-  → retourne JWT frais avec role=OWNER + tenantId
-    ↓
-Client : setAuth(newToken, { ...user, role: "OWNER", tenantId })
-    ↓
-router.replace("/dashboard") → accès immédiat
-```
-
-### Guards dans `/profil`
-
-- `role === "OWNER"` ou `"STAFF"` → redirect `/dashboard` au mount
-- `role === "CLIENT"` → affiche CTA "Ouvrir mon salon → /onboarding"
-
----
-
-## 14. Paiements Stripe Connect
-
-### Architecture marketplace
-
-```
-Client → paiement acompte → Belo collecte
-Belo → virement automatique → Compte gérant (Stripe Express)
-```
-
-### Flow
+### `src/lib/analytics.ts`
 
 ```typescript
-// 1. Onboarding gérant
-POST /api/stripe/connect
-→ crée compte Stripe Express
-→ retourne onboarding URL
+track("seo_page_view",      { city, category })  // arrivée sur page SEO
+track("seo_salon_click",    { salonId })          // clic sur un salon
+track("seo_booking_start")                        // début de réservation
+track("seo_booking_success")                      // booking confirmé
+track("seo_drop",           { step })             // abandon de funnel
+track("seo_zero_results",   { city, category })   // page sans salons
+```
 
-// 2. Paiement client
-POST /api/stripe/payment { bookingId, amount }
-→ crée PaymentIntent sur compte plateforme
-→ commission Belo (configurable via Settings)
+En développement : `console.info("[BELO:track]", event, props)`.
 
-// 3. Webhook Stripe
-POST /api/webhooks
-→ payment_intent.succeeded → confirme booking
-→ account.updated → active stripeOnboardingComplete
+En production : brancher ici PostHog / GA4 / Segment dans `sendEvent()`.
+
+---
+
+## 21. Admin Panel (7 vues)
+
+Route : `/admin` — ADMIN et SUPER_ADMIN uniquement.
+
+| Vue | Données |
+|-----|---------|
+| Mission Control | Stats temps réel : salons, bookings, revenus, fraudes |
+| Tenants | Liste tous les salons, approve/block |
+| Plans | Gestion plans, sync quotas |
+| Fraude | Alertes avec score et signaux |
+| Équipe | Membres plateforme |
+| Logs | Journal d'audit + DLQ (filtre `dlq:*`) |
+| Réglages | Maintenance mode, fees, limits |
+
+---
+
+## 22. Onboarding gérant
+
+```
+CLIENT → /profil → CTA "Ouvrir mon salon"
+  ↓
+/onboarding (4 étapes)
+  1. Nom + description
+  2. Adresse + ville + pays
+  3. Téléphone + WhatsApp + email
+  4. Catégorie
+  ↓
+POST /api/tenants
+  → normalise phone E.164
+  → geocodeAddress (Nominatim + fallback)
+  → transaction atomique : Tenant + User.role = OWNER
+  → retourne JWT frais (role=OWNER, tenantId)
+  ↓
+setAuth(newToken, { ...user, role: "OWNER", tenantId })
+router.replace("/dashboard")
 ```
 
 ---
 
-## 15. Installation locale
+## 23. Paiements Stripe Connect
 
-### Windows
+```
+Client → acompte → Belo collecte
+Belo → virement → Compte gérant (Express)
+```
+
+`POST /api/stripe/connect` → onboarding URL · `POST /api/stripe/payment` → PaymentIntent · `POST /api/webhooks` → confirm booking
+
+---
+
+## 24. Installation locale
 
 ```cmd
 cd "C:\Users\papan\Downloads\belo-complete (2)\belo"
@@ -570,7 +898,7 @@ npm install
 copy .env.example .env.local
 ```
 
-Remplir `.env.local` (voir section 16), puis :
+Remplir `.env.local` (section 25), puis :
 
 ```cmd
 npx prisma generate
@@ -579,31 +907,24 @@ npx ts-node prisma/seed.ts
 npm run dev
 ```
 
-Ouvrir http://localhost:3000
-
-### URLs de développement
+### URLs clés
 
 | URL | Description |
 |-----|-------------|
-| `http://localhost:3000` | Redirect → `/fr` |
+| `http://localhost:3000` | → redirect `/fr` |
 | `http://localhost:3000/fr` | Landing page |
 | `http://localhost:3000/login` | Connexion OTP |
-| `http://localhost:3000/onboarding` | Créer un salon |
+| `http://localhost:3000/onboarding` | Créer salon |
 | `http://localhost:3000/profil` | Profil client |
 | `http://localhost:3000/dashboard` | Dashboard gérant |
-| `http://localhost:3000/dashboard/bookings` | Réservations |
-| `http://localhost:3000/dashboard/services` | Services |
-| `http://localhost:3000/dashboard/horaires` | Horaires |
-| `http://localhost:3000/dashboard/profil` | Profil salon |
 | `http://localhost:3000/admin` | Super Admin |
-| `http://localhost:3000/fr/salons/dakar/hair` | Page SEO exemple |
+| `http://localhost:3000/dakar/coiffeur` | Page SEO locale |
+| `http://localhost:3000/fr/salons/dakar/hair` | Page SEO i18n |
 | `http://localhost:3000/booking/studio-elegance-dakar` | Flow réservation |
-| `http://localhost:3000/fr/plans` | Tarifs |
-| `http://localhost:3000/fr/for-salons` | Page B2B |
 
 ---
 
-## 16. Variables d'environnement
+## 25. Variables d'environnement
 
 ```env
 # ── Base de données (Neon PostgreSQL) ──────────────────────────
@@ -619,6 +940,10 @@ REFRESH_TOKEN_EXPIRES_IN=30d
 NEXT_PUBLIC_APP_URL=https://votre-domaine.vercel.app
 NODE_ENV=production
 CRON_SECRET=votre-secret-cron-vercel
+
+# ── Cache Redis (Upstash) — laisser vide = mode dégradé DB-only
+UPSTASH_REDIS_REST_URL=https://...upstash.io
+UPSTASH_REDIS_REST_TOKEN=...
 
 # ── WhatsApp Cloud API (OTP + confirmations) ───────────────────
 WHATSAPP_PHONE_ID=
@@ -643,107 +968,132 @@ R2_BUCKET=belo-media
 R2_PUBLIC_URL=https://cdn.belo.sn
 
 # ── Dev uniquement ────────────────────────────────────────────
-# OTP_DEV_BYPASS=123456   # décommente pour bypass WhatsApp en dev
+# OTP_DEV_BYPASS=123456
 ```
 
-> ⚠️ `NEXT_PUBLIC_APP_URL` ne doit pas avoir de commentaire inline sur la même ligne — cela cause `ERR_INVALID_CHAR`.
+> ⚠️ Pas de commentaire inline sur les valeurs `.env` — cause `ERR_INVALID_CHAR`.
 
 ---
 
-## 17. Structure des dossiers
+## 26. Structure des dossiers
 
 ```
 belo/
 ├── prisma/
-│   ├── schema.prisma          ← 21 modèles (source of truth)
-│   ├── seed.ts                ← Données de test réalistes
-│   └── migrations/            ← 9 migrations versionnées
+│   ├── schema.prisma                  ← 21 modèles
+│   ├── seed.ts                        ← Données de test
+│   └── migrations/                    ← 11 migrations versionnées
+│       └── 20260508000000_partial_unique_slot_booking/
 │
 ├── src/
-│   ├── proxy.ts               ← Middleware Next.js 16 (auth + i18n)
-│   │
-│   ├── app/
-│   │   ├── layout.tsx         ← Root layout (ThemeInit, globals.css)
-│   │   ├── globals.css        ← Design tokens CSS (dark/light)
-│   │   │
-│   │   ├── (public)/          ← Pages sans layout dashboard
-│   │   │   ├── page.tsx       ← redirect("/fr")
-│   │   │   ├── login/         ← Connexion OTP
-│   │   │   ├── profil/        ← Profil client (tabs)
-│   │   │   ├── booking/[slug] ← Flow réservation
-│   │   │   ├── salons/        ← Listing public
-│   │   │   ├── plans/         ← Tarifs (redirect /fr/plans)
-│   │   │   └── pour-les-salons/ ← B2B (redirect /fr/for-salons)
-│   │   │
-│   │   ├── [lang]/            ← Pages i18n SSG/ISR
-│   │   │   ├── layout.tsx     ← Meta hreflang + LangSync
-│   │   │   ├── page.tsx       ← Landing Wolt-level
-│   │   │   ├── salons/        ← Listing + [city] + [city]/[category]
-│   │   │   ├── for-salons/    ← Page B2B (8 sections conversion)
-│   │   │   └── plans/         ← Pricing (toggle mensuel/annuel)
-│   │   │
-│   │   ├── onboarding/        ← Création salon 4 étapes
-│   │   ├── dashboard/         ← Espace gérant (OWNER/STAFF)
-│   │   │   ├── layout.tsx     ← Auth guard + compteur notifs
-│   │   │   ├── page.tsx       ← Vue d'ensemble
-│   │   │   ├── bookings/      ← Accept/Refuse réservations
-│   │   │   ├── services/      ← CRUD prestations
-│   │   │   ├── horaires/      ← Horaires d'ouverture
-│   │   │   ├── equipe/        ← Membres STAFF
-│   │   │   └── profil/        ← Profil salon
-│   │   │
-│   │   ├── admin/             ← Panel admin (7 vues)
-│   │   └── api/               ← Route handlers
-│   │
-│   ├── components/
-│   │   ├── ui/
-│   │   │   ├── Nav.tsx        ← Navigation (PublicNav + DashNav)
-│   │   │   ├── PhoneInput.tsx ← Input téléphone 240+ pays
-│   │   │   ├── SalonCard.tsx  ← Card premium avec badges
-│   │   │   └── SectionRow.tsx ← Scroll horizontal snap
-│   │   ├── SearchBar.tsx      ← Autocomplete ville + catégorie
-│   │   ├── CookieBanner.tsx   ← RGPD (3 catégories)
-│   │   ├── ThemeInit.tsx      ← Dark/light mode (SSR-safe)
-│   │   └── LangSync.tsx       ← Sync URL lang ↔ LangContext
+│   ├── proxy.ts                       ← Middleware Next.js 16 (auth + i18n + rate limit)
 │   │
 │   ├── lib/
-│   │   ├── phone.ts           ← 240+ pays, E.164, validation
-│   │   ├── auth-client.ts     ← getToken, getUser, setAuth, clearAuth
-│   │   ├── route-auth.ts      ← withAuth, withRole, signJWT
-│   │   ├── i18n.ts            ← Traductions fr/en (5 namespaces)
-│   │   ├── i18n-server.ts     ← getTranslations() pour Server Components
-│   │   ├── i18n-localize.ts   ← getLocalized() pour champs bilingues JSON
-│   │   ├── events.ts          ← emitEvent / onEvent + EventLog
-│   │   ├── event-handlers.ts  ← Enregistrement des handlers
-│   │   ├── event-queue.ts     ← processEventQueue() SKIP LOCKED
-│   │   ├── cors.ts            ← getCorsHeaders() (allowlist, pas de wildcard)
-│   │   ├── rate-limit.ts      ← Rate limiter en mémoire (edge-safe)
-│   │   ├── settings.ts        ← getAllSettings() avec cache 30s
-│   │   └── zod-formatter.ts   ← zodErrorResponse()
+│   │   ├── design/
+│   │   │   └── intent.ts              ← Intent system (@frozen)
+│   │   ├── motion/
+│   │   │   ├── motion.ts              ← MOTION constants (@frozen)
+│   │   │   └── presets.ts             ← Framer Motion Variants prêts à l'emploi
+│   │   ├── cache-engine.ts            ← L1+L2+L3, SWR, anti-stampede, safeParse
+│   │   ├── lru-cache.ts               ← LRU 500 entrées, TTL, globalThis singleton
+│   │   ├── redis.ts                   ← Upstash client, mode dégradé si unconfigured
+│   │   ├── circuit-breaker.ts         ← CLOSED/OPEN/HALF-OPEN via Redis
+│   │   ├── retry-engine.ts            ← Full Jitter + DLQ via AuditLog
+│   │   ├── rate-limit.ts              ← Sliding window Redis + DB fallback
+│   │   ├── analytics.ts               ← track() — 6 events funnel SEO
+│   │   ├── phone.ts                   ← 240+ pays, E.164, validation
+│   │   ├── auth-client.ts             ← getToken, getUser, setAuth, clearAuth
+│   │   ├── route-auth.ts              ← withAuth, withRole, signJWT
+│   │   ├── i18n.ts                    ← Traductions fr/en (5 namespaces)
+│   │   ├── i18n-server.ts             ← getTranslations() Server Components
+│   │   ├── events.ts                  ← emitEvent / onEvent + EventLog
+│   │   ├── cors.ts                    ← getCorsHeaders() allowlist
+│   │   ├── settings.ts                ← getAllSettings() cache 30s
+│   │   └── index.ts                   ← Exports centralisés
+│   │
+│   ├── hooks/
+│   │   ├── useAsyncAction.ts          ← Socle async (7 protections)
+│   │   ├── useBookingAction.ts        ← AbortController + idempotency key
+│   │   ├── useBooking.ts              ← State machine réservation
+│   │   └── useLang.ts                 ← Langue courante côté client
+│   │
+│   ├── app/
+│   │   ├── globals.css                ← Design tokens CSS + spacing scale + motion
+│   │   │
+│   │   ├── (public)/                  ← Pages clients
+│   │   │   ├── page.tsx               ← redirect("/fr")
+│   │   │   ├── login/                 ← Connexion OTP
+│   │   │   ├── profil/                ← Profil client + CTA salon
+│   │   │   ├── booking/[slug]/        ← Flow réservation
+│   │   │   ├── salons/                ← Listing public
+│   │   │   ├── plans/
+│   │   │   └── pour-les-salons/
+│   │   │
+│   │   ├── (city-seo)/                ← Route group SEO local
+│   │   │   └── [city]/[category]/
+│   │   │       ├── page.tsx           ← SSG SEO, JSON-LD, ≥3 salons guard
+│   │   │       └── SalonListSeoClient.tsx ← Slots dynamiques (Suspense)
+│   │   │
+│   │   ├── [lang]/                    ← Pages i18n SSG/ISR
+│   │   │   ├── page.tsx               ← Landing Wolt-level
+│   │   │   ├── salons/[city]/[category]/  ← 224 pages SSG
+│   │   │   ├── for-salons/
+│   │   │   └── plans/
+│   │   │
+│   │   ├── onboarding/                ← Création salon 4 étapes
+│   │   ├── dashboard/                 ← Espace gérant
+│   │   ├── admin/                     ← Panel admin (7 vues)
+│   │   └── api/                       ← Route handlers
+│   │
+│   ├── components/
+│   │   ├── motion/
+│   │   │   └── MotionTap.tsx          ← Wrapper universel tappable
+│   │   ├── ui/
+│   │   │   ├── Button.tsx             ← Intent-driven, ctaFeedback motion
+│   │   │   ├── StatusBadge.tsx        ← Status → intent mapping
+│   │   │   ├── BottomNav.tsx          ← 4 tabs, dot actif, safe-area iPhone
+│   │   │   ├── Nav.tsx                ← Navigation desktop/mobile
+│   │   │   ├── PhoneInput.tsx         ← 240+ pays, recherche, validation
+│   │   │   ├── SalonCard.tsx          ← Card premium avec badges
+│   │   │   └── SectionRow.tsx         ← Scroll horizontal snap
+│   │   ├── home/
+│   │   │   ├── SalonHero.tsx          ← Horizontal snap, parallax, stagger
+│   │   │   └── SalonList.tsx          ← Stagger vertical/horizontal
+│   │   ├── bookings/
+│   │   │   └── BookingCard.tsx        ← Hiérarchie stricte, 3 actions
+│   │   ├── checkout/
+│   │   │   └── Receipt.tsx            ← Dark card, check circle, total vert
+│   │   ├── booking/
+│   │   │   └── BookingButton.tsx      ← 4 états visuels, spinner, AnimatePresence
+│   │   ├── SearchBar.tsx
+│   │   ├── CookieBanner.tsx
+│   │   ├── ThemeInit.tsx
+│   │   └── LangSync.tsx
 │   │
 │   ├── services/
-│   │   ├── booking.service.ts ← createBooking, confirmBooking, cancel
-│   │   ├── ranking.service.ts ← searchRanked() formule 6 facteurs
-│   │   ├── trending.service.ts← onBooking/View/Favorite pour trending
-│   │   ├── fraud.service.ts   ← 6 signaux, auto-block score ≥ 80
-│   │   ├── plan.service.ts    ← syncPlanToTenants, resetTenantQuota
-│   │   └── geocode.ts         ← Nominatim + fallback ville/pays
+│   │   ├── booking.service.ts         ← createBooking (4 couches anti double-booking)
+│   │   ├── ranking.service.ts         ← searchRanked() 6 facteurs
+│   │   ├── trending.service.ts
+│   │   ├── fraud.service.ts
+│   │   ├── plan.service.ts
+│   │   └── geocode.ts
 │   │
 │   ├── shared/
-│   │   └── errors.ts          ← AppError, AppErrors, handleRouteError
+│   │   └── errors.ts                  ← AppError, AppErrors, handleRouteError
 │   │
 │   └── infrastructure/
-│       └── db/prisma.ts       ← PrismaClient singleton
+│       └── db/prisma.ts               ← PrismaClient singleton
 │
-├── next.config.js             ← Headers sécurité, images CDN
-├── tailwind.config.ts         ← Classes CSS variables
-├── vercel.json                ← Cron jobs (cron-secret)
-└── .env.example               ← Toutes les variables
+├── .eslintrc.js                       ← Guards design system
+├── tailwind.config.ts                 ← intent.* tokens + CSS variables
+├── next.config.js                     ← Headers sécurité, images CDN
+├── vercel.json                        ← Cron jobs
+└── .env.example                       ← Toutes les variables
 ```
 
 ---
 
-## 18. Plans tarifaires
+## 27. Plans tarifaires
 
 | Plan | FCFA/mois | EUR/mois | Bookings/mois | Services |
 |------|-----------|----------|---------------|---------|
@@ -751,101 +1101,70 @@ belo/
 | **Pro** | 15 000 | ~23 € | 500 | 20 |
 | **Premium** | 35 000 | ~53 € | Illimités | Illimités |
 
-### Avantages Pro+
-
-- WhatsApp automatique (−58% no-shows constatés)
-- Acompte configurable (10–100%)
-- Réseaux sociaux sur profil
-- Analytics
-
-### Avantages Premium
-
-- Tout Pro +
-- WhatsApp + SMS + Email
-- Analytics avancés + IA
-- Multi-staff
-- API Webhook
-- Position boostée dans le ranking
-
 ---
 
-## 19. Déploiement Vercel
+## 28. Déploiement Vercel
 
 ```bash
-npm install -g vercel
-vercel login
 vercel --prod
 ```
 
-### Build command (package.json)
+Build : `prisma generate && prisma migrate deploy && next build`
 
-```json
-"build": "prisma generate && prisma migrate deploy && next build"
+Variables supplémentaires à ajouter dans Vercel pour activer le cache Redis :
+```
+UPSTASH_REDIS_REST_URL   = https://...upstash.io
+UPSTASH_REDIS_REST_TOKEN = ...
 ```
 
-La migration Prisma s'exécute automatiquement à chaque déploiement.
-
-### Variables Vercel à configurer
-
-Dans **Settings → Environment Variables** (Production + Preview) :
-
-```
-DATABASE_URL, DIRECT_URL, JWT_SECRET, NEXT_PUBLIC_APP_URL,
-CRON_SECRET, WHATSAPP_PHONE_ID, WHATSAPP_TOKEN,
-STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-```
+Sans ces variables, l'app fonctionne en mode DB-only (aucune erreur).
 
 ### Cron jobs (vercel.json)
 
 ```json
-{
-  "crons": [
-    { "path": "/api/cron/generate-slots",  "schedule": "0 2 * * *"  },
-    { "path": "/api/cron/notifications",   "schedule": "0 * * * *"  },
-    { "path": "/api/cron/metrics",         "schedule": "*/30 * * * *"},
-    { "path": "/api/cron/events",          "schedule": "* * * * *"  },
-    { "path": "/api/cron/purge-logs",      "schedule": "0 3 * * 0"  }
-  ]
-}
+{ "path": "/api/cron/generate-slots",  "schedule": "0 2 * * *"   },
+{ "path": "/api/cron/notifications",   "schedule": "0 * * * *"   },
+{ "path": "/api/cron/metrics",         "schedule": "*/30 * * * *" },
+{ "path": "/api/cron/events",          "schedule": "* * * * *"   },
+{ "path": "/api/cron/purge-logs",      "schedule": "0 3 * * 0"   }
 ```
 
 ---
 
-## 20. Bugs corrigés (historique)
+## 29. Bugs corrigés (historique)
+
+### Mai 2026 — v0.3.0
+
+| Bug | Cause | Fix |
+|-----|-------|-----|
+| Cache L2 toujours null | `setex(key, str)` → `get<T>()` retourne la string brute, `cached.timestamp` = `undefined` → toutes comparaisons NaN → fallback L3 systématique | `get<string>` + `safeParse<T>` avec logging + stockage `JSON.stringify` explicite |
+| Pipeline count casting fragile | `results?.[2] as number` — Upstash peut retourner autre chose | `Number(results?.[2] ?? 0)` coerce proprement |
+| Double-decrement `bookingsUsedMonth` | Deux annulations concurrentes lisaient `PENDING`, passaient `canCancelBooking`, décrémentaient toutes les deux | Re-lecture du status **dans la transaction**, return si déjà `CANCELLED` |
+| Plan limit TOCTOU | `bookingsUsedMonth` lu hors transaction → 2 requêtes concurrentes à limit-1 passaient toutes les deux | `SELECT ... FOR UPDATE` sur Tenant dans la transaction |
+| Idempotency race → mauvais code 409 | `findUnique` hors transaction → deux requêtes avec même clé → P2002 mappé en `SLOT_TAKEN` | Catch P2002 → re-fetch par `idempotencyKey` pour distinguer les cas |
+| Contrainte DB incorrecte | `@@unique([slotId, status])` permettait PENDING + CONFIRMED sur le même slot | Migration `20260508000000` : partial unique index `WHERE status IN ('PENDING','CONFIRMED')` |
+| Framer Motion absent | Package non installé → import error | `npm install framer-motion@^12` |
 
 ### Mai 2026 — v0.2.0
 
 | Bug | Cause | Fix |
 |-----|-------|-----|
-| `POST /api/tenants → 500` | `description` et `category` (champs Zod) spreadés dans `prisma.tenant.create()` — ces colonnes **n'existent pas** sur le modèle Tenant → `PrismaClientValidationError` non catchée → 500 silencieux | Mapping explicite des colonnes Tenant uniquement |
-| Double indicatif `+221+221...` | `toE164("221", "+221 77...")` → digits `"22177..."` → résultat `"+22122177..."` | `toE164()` vérifie si `digits.startsWith(dial)` avant de le préfixer |
-| Recherche `+352` ne trouve pas Luxembourg | `c.dial.includes("+352")` → `"352".includes("+352")` = `false` | Strip `+` avant la comparaison : `c.dial.includes(search.replace(/^\+/, ""))` |
-| `lat`/`lng` null → ranking cassé | Tenant créé sans appel à `geocodeAddress()` | Ajout de `geocodeAddress(address, city)` dans `POST /api/tenants` |
-| `aria-invalid="{expression}"` | Booléen JSX non accepté par le validateur ARIA | `aria-invalid={showErr ? "true" : "false"}` |
-| Role reste CLIENT après onboarding | Conséquence directe du 500 API (JWT jamais retourné) | Résolu par le fix API + `setAuth(newToken, updatedUser)` client-side |
-| Conflit `middleware.ts` + `proxy.ts` | Next.js 16 détecte `proxy.ts` comme middleware natif ; créer `middleware.ts` en plus cause un build error | Supprimer `middleware.ts`, utiliser uniquement `proxy.ts` |
+| `POST /api/tenants → 500` | `description`/`category` Zod spreadés dans `prisma.create()` — pas de colonnes Tenant | Mapping explicite des colonnes uniquement |
+| Double indicatif `+221+221...` | `toE164` ne vérifiait pas le préfixe | Guard `digits.startsWith(dial)` |
+| Recherche `+352` → 0 résultats | `"352".includes("+352") = false` | Strip `+` avant comparaison |
+| `lat`/`lng` null | Aucun appel à `geocodeAddress` | Ajout geocoding dans `POST /api/tenants` |
+| `aria-invalid` ARIA invalide | Booléen JSX non accepté | `"true" \| "false"` en string |
+| Role CLIENT après onboarding | Conséquence du 500 API | Résolu par le fix API + `setAuth(newToken)` |
 
-### Avril 2026 — v0.1.5
+### Mars–Avril 2026 — v0.1.x
 
-| Bug | Cause | Fix |
-|-----|-------|-----|
-| CORS `ERR_INVALID_CHAR` | Commentaire inline dans `.env.local` sur `NEXT_PUBLIC_APP_URL` | Supprimer commentaires sur les lignes de valeur |
-| PhoneInput API cassée | Login + booking utilisaient ancienne API (`setCountryCode: Dispatch`) | Wrapper `onCountryChange={c => setCountryCode(c.dial)}` |
-| Build TS : `Record<string, string>` not assignable | `getLocalized()` trop strict | Relaxer `LocalizedField` pour accepter `Record<string, string>` |
-| SSG 0 résultats featured salons | `getFeaturedSalons()` faisait `fetch(NEXT_PUBLIC_APP_URL/api/...)` undefined côté serveur | Remplacer par requête Prisma directe dans Server Components |
-| `NEXT_PUBLIC_APP_URL` undefined Vercel | Variable non settée côté Edge | Self-HTTP → Prisma direct dans Server Components |
-| Paramètres async Next.js 16 | `params.slug` nécessite `use(params)` en App Router 16 | Ajout `use()` partout où `params` est asynchrone |
-
-### Mars 2026 — v0.1.0
-
-| Bug | Cause | Fix |
-|-----|-------|-----|
-| Conflit `middleware.ts` + `proxy.ts` | Next.js 16 détecte les deux | Suppression de `middleware.ts`, helpers déplacés dans `route-auth.ts` |
-| Plans nested keys TypeScript | `t("plans.free.name")` — clé nested pas dans le union type | Aplatir en `t("plans.free_name")` |
-| Ranking SQL type mismatch | `$queryRaw` template avec types Prisma stricts | Annotations TypeScript explicites |
-| Seed.ts — `FraudStatus.REVIEWING` | Enum incorrect dans le schéma | Corriger en `UNDER_REVIEW` |
-| `Service.category` enum vs String | Schéma Prisma : `category String` (pas enum) | Adapter seed.ts et queries |
+| Bug | Fix |
+|-----|-----|
+| Conflit `middleware.ts` + `proxy.ts` | Supprimer `middleware.ts`, `proxy.ts` suffit en Next.js 16 |
+| CORS `ERR_INVALID_CHAR` | Supprimer commentaires inline dans `.env.local` |
+| `NEXT_PUBLIC_APP_URL` undefined Vercel | Remplacer `fetch(URL/api/...)` par requêtes Prisma directes en Server Components |
+| Plans nested keys TypeScript | Aplatir en `t("plans.free_name")` |
 
 ---
 
-*Dernière mise à jour : Mai 2026 — commit `26f218a`*
+*Dernière mise à jour : Mai 2026 — commit `20cffca`*
