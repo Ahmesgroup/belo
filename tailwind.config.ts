@@ -11,6 +11,17 @@ const config: Config = {
       },
       // CSS-variable–based palette — responds to [data-theme="dark"]
       colors: {
+        // ── INTENT SYSTEM — seule source de vérité couleur ──────────
+        // Jamais utiliser ces couleurs directement en hex dans les composants.
+        // Passer par intent.ts → getIntentColor() pour les styles inline.
+        intent: {
+          cta:     "#1DB954",
+          success: "#1DB954",
+          confirm: "#1DB954",
+          error:   "#DC2626",
+          neutral: "#0A0A0A",
+          muted:   "#6B7280",
+        },
         bg:      "var(--bg)",
         bg2:     "var(--bg2)",
         card:    "var(--card)",
