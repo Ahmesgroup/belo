@@ -35,6 +35,34 @@ const STALE_MULTIPLIER  = 2;
 const LOCK_TTL_S        = 5;
 const JITTER_MAX_MS     = 150;
 
+// ── SAFE JSON PARSE ───────────────────────────────────────────
+// Centralisé ici — pas d'IIFE inline, debug possible en prod.
+// Loggue la clé concernée pour faciliter le debug Vercel logs.
+//
+// Note: @upstash/redis may auto-deserialize JSON responses and return
+// an already-parsed object even when get<string>() is called.
+// The runtime guard `typeof (raw as unknown) !== "string"` handles both:
+//   • Upstash returns raw string → JSON.parse is called
+//   • Upstash returns parsed object → returned as-is (no double-parse)
+
+function safeParse<T>(raw: string | null, key?: string): T | null {
+  if (!raw) return null;
+
+  // Runtime guard: Upstash REST client may auto-deserialize JSON.
+  // Bypass TypeScript narrowing with `as unknown` to check actual runtime type.
+  if (typeof (raw as unknown) !== "string") return raw as unknown as T;
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch (e) {
+    console.error(
+      `[CacheEngine] JSON parse failed${key ? ` for key "${key}"` : ""}:`,
+      e,
+    );
+    return null;
+  }
+}
+
 // ── CACHE ENGINE ──────────────────────────────────────────────
 
 export class CacheEngine {
@@ -53,10 +81,12 @@ export class CacheEngine {
     if (l1 && versionOk(l1.version)) return l1.data;
 
     // ── L2 ─────────────────────────────────────────────────
-    // Capture local const so TypeScript can narrow Redis | null → Redis
     const r: Redis | null = redis;
     if (r) {
-      const cached = await r.get<CachePayload<T>>(key).catch(() => null);
+      // FIX: get<string> + safeParse instead of get<CachePayload<T>>
+      // get<T>() does not guarantee deserialization when stored as string via set(key, JSON.stringify(...))
+      const raw    = await r.get<string>(key).catch((): string | null => null);
+      const cached = safeParse<CachePayload<T>>(raw, key);
 
       if (cached) {
         const ageMs        = Date.now() - cached.timestamp;
@@ -92,6 +122,10 @@ export class CacheEngine {
     lru.clear();
     const r: Redis | null = redis;
     if (r) {
+      // ⚠️ SCALE WARNING: redis.keys() est O(N) — peut bloquer Redis à > 10k clés.
+      // Phase 2: remplacer par tag-based invalidation :
+      //   await r.smembers(`tag:${pattern}`) → DEL chaque clé membre
+      // OK pour Phase 1 (< 100 salons actifs)
       const keys = await r.keys(pattern).catch(() => [] as string[]);
       if (keys.length > 0) {
         await r.del(...(keys as [string, ...string[]])).catch(() => {});
@@ -114,14 +148,15 @@ export class CacheEngine {
     }
 
     const lockKey = `lock:${key}`;
-
     const gotLock = await r.set(lockKey, "1", { nx: true, ex: LOCK_TTL_S }).catch(() => null);
 
     if (!gotLock) {
       const wait = 50 + Math.floor(Math.random() * JITTER_MAX_MS);
       await new Promise<void>((res) => setTimeout(res, wait));
 
-      const retry = await r.get<CachePayload<T>>(key).catch(() => null);
+      // FIX: get<string> + safeParse for consistent JSON handling
+      const retryRaw = await r.get<string>(key).catch((): string | null => null);
+      const retry    = safeParse<CachePayload<T>>(retryRaw, key);
       if (retry) {
         lru.set(key, retry.data, retry.version, l1Ttl);
         return retry;
@@ -137,11 +172,15 @@ export class CacheEngine {
       const payload: CachePayload<T> = { ...fresh, timestamp: Date.now() };
       const exS     = options.ttl * STALE_MULTIPLIER;
 
-      await r.set(key, payload, { ex: exS }).catch(() => {});
+      // FIX: store as explicit JSON string so get<string> + safeParse round-trips correctly.
+      // Do NOT use setex() — it has the same string storage issue.
+      // Do NOT add nx:false — Upstash doesn't support it; SET without NX overwrites by default.
+      await r.set(key, JSON.stringify(payload), { ex: exS }).catch(() => {});
+
       lru.set(key, fresh.data, fresh.version, l1Ttl);
       return payload;
     } finally {
-      // Laisser le TTL expirer — ne pas supprimer manuellement
+      // Leave lock TTL to expire — never delete manually
     }
   }
 

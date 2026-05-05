@@ -17,6 +17,7 @@ import { getCorsHeaders } from "@/lib/cors";
 import { emitEvent } from "@/lib/events";
 import { geocodeAddress } from "@/services/geocode";
 import { normalizePhone } from "@/lib/phone";
+import { CacheEngine, buildCacheKey } from "@/lib/cache-engine";
 
 // ── SCHEMAS ───────────────────────────────────────────────────
 
@@ -85,34 +86,64 @@ export async function GET(req: NextRequest) {
 
     const { city, category, plan, search, page, pageSize } = parsed.data;
 
-    const where = {
-      status: "ACTIVE" as const,
-      ...(city     ? { city:     { contains: city,   mode: "insensitive" as const } } : {}),
-      ...(plan     ? { plan:     plan as "FREE" | "PRO" | "PREMIUM" }                 : {}),
-      ...(category ? { services: { some: { category: category as string, isActive: true } } } : {}),
-      ...(search   ? {
-        OR: [
-          { name:    { contains: search, mode: "insensitive" as const } },
-          { address: { contains: search, mode: "insensitive" as const } },
-        ],
-      } : {}),
-    };
+    // Cache key includes all filter dimensions so each unique combination
+    // is cached independently. TTL 60 s matches the s-maxage on the response.
+    const cacheKey = buildCacheKey(
+      "tenants",
+      city     ?? "all",
+      plan     ?? "all",
+      category ?? "all",
+      search   ?? "",
+      page,
+      pageSize,
+    );
 
-    const [tenants, total] = await Promise.all([
-      prisma.tenant.findMany({
-        where,
-        select: {
-          id: true, name: true, slug: true,
-          city: true, country: true, address: true,
-          photos: true, coverUrl: true, plan: true,
-          _count: { select: { bookings: true } },
-        },
-        skip:    (page - 1) * pageSize,
-        take:    pageSize,
-        orderBy: [{ plan: "desc" }, { createdAt: "desc" }],
-      }),
-      prisma.tenant.count({ where }),
-    ]);
+    const cached = await CacheEngine.get<{
+      tenants: Array<{
+        id: string; name: string; slug: string;
+        city: string | null; country: string; address: string | null;
+        photos: string[]; coverUrl: string | null; plan: string;
+        _count: { bookings: number };
+      }>;
+      total: number;
+    }>(
+      cacheKey,
+      async () => {
+        const where = {
+          status: "ACTIVE" as const,
+          ...(city     ? { city:     { contains: city,   mode: "insensitive" as const } } : {}),
+          ...(plan     ? { plan:     plan as "FREE" | "PRO" | "PREMIUM" }                 : {}),
+          ...(category ? { services: { some: { category: category as string, isActive: true } } } : {}),
+          ...(search   ? {
+            OR: [
+              { name:    { contains: search, mode: "insensitive" as const } },
+              { address: { contains: search, mode: "insensitive" as const } },
+            ],
+          } : {}),
+        };
+
+        const [tenants, total] = await Promise.all([
+          prisma.tenant.findMany({
+            where,
+            select: {
+              id: true, name: true, slug: true,
+              city: true, country: true, address: true,
+              photos: true, coverUrl: true, plan: true,
+              _count: { select: { bookings: true } },
+            },
+            skip:    (page - 1) * pageSize,
+            take:    pageSize,
+            orderBy: [{ plan: "desc" }, { createdAt: "desc" }],
+          }),
+          prisma.tenant.count({ where }),
+        ]);
+
+        return { data: { tenants, total }, version: 1 };
+      },
+      { ttl: 60 },
+    );
+
+    const { tenants, total } = cached;
 
     return NextResponse.json({
       data: {
@@ -231,6 +262,9 @@ export async function POST(req: NextRequest) {
       ownerId:    auth.userId,
       plan:       tenant.plan,
     }).catch(() => {});
+
+    // Invalidate listing cache so the new salon appears on next request
+    CacheEngine.invalidatePattern("belo:tenants:*").catch(() => {});
 
     // Fresh JWT with new role so the client can update localStorage immediately
     const accessToken = await signJWT({

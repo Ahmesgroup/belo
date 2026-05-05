@@ -91,7 +91,8 @@ async function rateLimitRedis(
   pipeline.expire(redisKey, windowS);
 
   const results = await pipeline.exec().catch(() => null);
-  const count   = (results?.[2] as number | null) ?? 0;
+  // Number() coerces correctly regardless of what Upstash pipeline returns
+  const count   = Number(results?.[2] ?? 0);
 
   return count > opts.max;
 }

@@ -40,6 +40,15 @@ if (process.env.NODE_ENV !== "production") {
   globalThis.__beloRedis = redis;
 }
 
+// Vérifier la connexion Redis au démarrage (dev uniquement — évite le bruit en prod)
+if (process.env.NODE_ENV === "development" && redis) {
+  redis.ping().then(() => {
+    console.log("[Redis] Connected to Upstash ✓");
+  }).catch((e: { message?: string }) => {
+    console.warn("[Redis] Connection failed — cache running in DB-only mode:", e?.message);
+  });
+}
+
 // Note: consumers should capture `const r = redis` locally and check
 // `if (r)` for TypeScript to narrow Redis | null → Redis correctly.
 // A module-level type predicate cannot narrow an imported binding.
