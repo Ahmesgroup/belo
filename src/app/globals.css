@@ -4,6 +4,125 @@
 @tailwind utilities;
 
 /* ============================================================
+   DESIGN TOKENS — BELO ELITE
+   Inspired by Stripe × Wolt × Airbnb
+   Mobile-first, dark/light, 4px grid
+   These extend (do not replace) the existing :root tokens below.
+   ============================================================ */
+
+:root {
+  /* ── SPACING SCALE (4px base) ─────────────────────────── */
+  --space-0:  0px;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* ── BORDER RADIUS ─────────────────────────────────────── */
+  --radius-xs:   4px;
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
+  --radius-2xl:  24px;
+  --radius-full: 9999px;
+
+  /* ── TYPOGRAPHY SCALE ──────────────────────────────────── */
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  clamp(2rem, 5vw, 3rem);
+
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+  --font-weight-black:    900;
+
+  --leading-tight:  1.2;
+  --leading-normal: 1.5;
+  --leading-loose:  1.8;
+
+  /* ── SHADOWS ───────────────────────────────────────────── */
+  --shadow-xs:    0 1px 2px 0 rgba(0,0,0,.05);
+  --shadow-sm:    0 1px 3px 0 rgba(0,0,0,.10), 0 1px 2px -1px rgba(0,0,0,.10);
+  --shadow-md:    0 4px 6px -1px rgba(0,0,0,.10), 0 2px 4px -2px rgba(0,0,0,.10);
+  --shadow-lg:    0 10px 15px -3px rgba(0,0,0,.10), 0 4px 6px -4px rgba(0,0,0,.10);
+  --shadow-xl:    0 20px 25px -5px rgba(0,0,0,.10), 0 8px 10px -6px rgba(0,0,0,.10);
+  --shadow-elite: 0 25px 50px -12px rgba(0,0,0,.25);
+  --shadow-glow:  0 0 0 3px rgba(34,211,138,.25);
+
+  /* ── BORDERS ───────────────────────────────────────────── */
+  --border-subtle:  1px solid rgba(0,0,0,.06);
+  --border-default: 1px solid rgba(0,0,0,.12);
+  --border-strong:  1px solid rgba(0,0,0,.20);
+  --border-focus:   2px solid #22d38a;
+
+  /* ── MOTION ────────────────────────────────────────────── */
+  --motion-instant: 0ms;
+  --motion-fast:    150ms;
+  --motion-smooth:  220ms;
+  --motion-gentle:  350ms;
+  --motion-slow:    500ms;
+
+  --ease-default: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in:      cubic-bezier(0.4,  0, 1,   1);
+  --ease-out:     cubic-bezier(0,    0, 0.2, 1);
+  --ease-bounce:  cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── SEMANTIC COLORS (light) ───────────────────────────── */
+  --color-primary:       #22d38a;
+  --color-primary-dark:  #0d9e6e;
+  --color-primary-light: rgba(34,211,138,.12);
+
+  --color-surface:       #ffffff;
+  --color-surface-alt:   #f7f5f1;
+  --color-on-surface:    #111827;
+  --color-on-surface-2:  #374151;
+  --color-on-surface-3:  #6b7280;
+
+  --color-error:    #dc2626;
+  --color-error-bg: rgba(220,38,38,.08);
+  --color-success:  #16a34a;
+  --color-warning:  #d97706;
+  --color-info:     #2563eb;
+
+  /* ── Z-INDEX ───────────────────────────────────────────── */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-overlay: 100;
+  --z-modal:   200;
+  --z-toast:   300;
+  --z-top:     400;
+}
+
+/* ── DARK MODE ─────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --color-surface:      #07080d;
+  --color-surface-alt:  #0b0f1a;
+  --color-on-surface:   #f0f4f8;
+  --color-on-surface-2: #a0b0c0;
+  --color-on-surface-3: #506070;
+
+  --border-subtle:  1px solid rgba(255,255,255,.06);
+  --border-default: 1px solid rgba(255,255,255,.10);
+  --border-strong:  1px solid rgba(255,255,255,.18);
+
+  --shadow-glow: 0 0 0 3px rgba(34,211,138,.35);
+}
+
+/* ============================================================
    DESIGN TOKENS
    Light theme is the default (:root).
    Dark theme overrides via [data-theme="dark"].

@@ -30,6 +30,7 @@
 // Side-effect import: registers all domain event handlers before first emitEvent
 import "@/lib/event-handlers";
 
+import { CacheEngine, buildCacheKey } from "@/lib/cache-engine";
 import { prisma } from "@/infrastructure/db/prisma";
 import { BookingStatus, PaymentStatus, NotifType, NotifStatus } from "@prisma/client";
 import {
@@ -59,12 +60,12 @@ type SlotLock = {
 };
 
 function isPrismaP2002(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "P2002"
-  );
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string; meta?: { target?: string[] | string } };
+  if (e.code === "P2002") return true;
+  // Certaines versions Prisma exposent uniquement meta.target sans code
+  if (Array.isArray(e.meta?.target) && e.meta.target.includes("idempotencyKey")) return true;
+  return false;
 }
 
 // ── INPUT TYPES ───────────────────────────────────────────────
@@ -175,6 +176,13 @@ export async function createBooking(dto: CreateBookingDTO) {
 
   try {
     booking = await prisma.$transaction(async (tx) => {
+
+      // Limite les locks au niveau de la transaction courante :
+      //   lock_timeout  : si un lock n'est pas disponible en 2 s → erreur
+      //   statement_timeout : aucune requête ne peut durer plus de 5 s
+      // Evite de tenir des locks indéfiniment si le DB est lent.
+      await tx.$executeRaw`SET LOCAL lock_timeout = '2s'`;
+      await tx.$executeRaw`SET LOCAL statement_timeout = '5s'`;
 
       // ── LOCK 1: Tenant (plan limit must be re-read under lock) ──
       // Without this, two concurrent requests at bookingsUsedMonth = limit-1
@@ -341,6 +349,9 @@ export async function createBooking(dto: CreateBookingDTO) {
     userId:     dto.userId,
     priceCents: booking.priceCents,
   }).catch(() => {});
+
+  // Invalidate slot cache so next listing shows updated availability
+  CacheEngine.invalidate(buildCacheKey("slots", dto.tenantId)).catch(() => {});
 
   return booking;
 }

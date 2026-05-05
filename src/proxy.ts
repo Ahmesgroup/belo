@@ -76,6 +76,31 @@ export async function proxy(req: NextRequest) {
     }
   }
 
+  // ── RATE LIMIT GLOBAL /api/* (100 req/min par identité) ─────
+  if (pathname.startsWith("/api/")) {
+    const { rateLimit } = await import("@/lib/rate-limit");
+    const limited = await rateLimit(req, { max: 100, windowMs: 60_000 });
+    if (limited) {
+      return new NextResponse(
+        JSON.stringify({ error: { code: "RATE_LIMITED", message: "Too many requests." } }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      );
+    }
+  }
+
+  // ── RATE LIMIT BOOKINGS (5 créations / 10 s par identité) ───
+  if (pathname === "/api/bookings" && req.method === "POST") {
+    const { rateLimitByKey, extractRequestIdentity } = await import("@/lib/rate-limit");
+    const id      = extractRequestIdentity(req);
+    const limited = await rateLimitByKey(`booking:${id}`, { max: 5, windowMs: 10_000 });
+    if (limited) {
+      return new NextResponse(
+        JSON.stringify({ error: { code: "RATE_LIMITED", message: "Trop de réservations. Attendez 10 secondes." } }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      );
+    }
+  }
+
   return NextResponse.next();
 }
 
