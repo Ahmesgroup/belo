@@ -5,9 +5,12 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans:  ["DM Sans",       "sans-serif"],
-        serif: ["Sora",          "sans-serif"],
-        mono:  ["JetBrains Mono","monospace"],
+        sans:    ["DM Sans",          "sans-serif"],
+        serif:   ["Sora",             "sans-serif"],
+        mono:    ["JetBrains Mono",   "monospace"],
+        // next/font CSS variable fonts — loaded in src/app/fonts.ts
+        heading: ["var(--font-fraunces)", "Georgia", "serif"],
+        body:    ["var(--font-dm)",       "DM Sans", "sans-serif"],
       },
       // CSS-variable–based palette — responds to [data-theme="dark"]
       colors: {

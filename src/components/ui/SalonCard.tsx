@@ -1,7 +1,11 @@
 "use client";
 
 import Link      from "next/link";
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import { staggerItem, tap } from "@/lib/motion/presets";
+import { getIntentColor } from "@/lib/design/intent";
+import { preloadSlots } from "@/lib/cache/slotCache";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -19,13 +23,21 @@ export interface SalonCardData {
   priceFrom?:   number | null;    // priceCents of cheapest service
   currency?:    string;
   isFavorite?:  boolean;
+  /** Créneaux restants — source backend UNIQUEMENT. Jamais recalculé UI. */
+  remainingSlots?: number;
+  /** Réservations de la semaine — pour la preuve sociale */
+  weeklyBookings?: number;
 }
 
 interface SalonCardProps {
-  salon:          SalonCardData;
-  lang?:          string;
-  onFavoriteToggle?: (salonId: string, next: boolean) => void;
-  className?:     string;
+  salon:              SalonCardData;
+  lang?:              string;
+  onFavoriteToggle?:  (salonId: string, next: boolean) => void;
+  className?:         string;
+  /** Calculé par getBestSalonId() dans le parent — jamais dans ce composant */
+  highlight?:         boolean;
+  /** Callback quand l'utilisateur veut réserver (ouvrir le drawer) */
+  onBook?:            (salon: SalonCardData) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -54,9 +66,21 @@ function formatDist(km: number) {
 
 // ── Component ─────────────────────────────────────────────────
 
-export function SalonCard({ salon, lang = "fr", onFavoriteToggle, className = "" }: SalonCardProps) {
+export function SalonCard({
+  salon,
+  lang = "fr",
+  onFavoriteToggle,
+  className = "",
+  highlight = false,
+  onBook,
+}: SalonCardProps) {
   const [imgErr,   setImgErr]   = useState(false);
   const [favState, setFavState] = useState(salon.isFavorite ?? false);
+
+  // Préchauffage du cache créneaux au hover / tap start
+  const handlePreload = useCallback(() => {
+    preloadSlots(salon.id).catch(() => {});
+  }, [salon.id]);
 
   const pb   = planBadge(salon.plan);
   const tb   = trendBadge(salon.trendingScore ?? 0, salon.bookings24h ?? 0);
@@ -70,16 +94,28 @@ export function SalonCard({ salon, lang = "fr", onFavoriteToggle, className = ""
     onFavoriteToggle?.(salon.id, next);
   }
 
+  const socialProof = (salon.weeklyBookings ?? 0) >= 20;
+
   return (
-    <Link
-      href={`/booking/${salon.slug}`}
+    <motion.div
+      variants={staggerItem}
+      whileTap={tap}
+      onHoverStart={handlePreload}
+      onTapStart={handlePreload}
       className={`
-        group block rounded-2xl bg-card border border-border overflow-hidden
-        shadow-soft hover:shadow-card hover:border-g2/30
-        transition-all duration-200 hover:-translate-y-1 active:scale-[0.98]
+        group rounded-2xl bg-card border overflow-hidden
+        shadow-soft hover:shadow-card
+        transition-shadow duration-200
+        ${highlight ? "ring-2" : ""}
         ${className}
       `}
+      style={highlight ? { borderColor: getIntentColor("cta") } : {}}
+    >
+    <Link
+      href={`/booking/${salon.slug}`}
+      className="block"
       aria-label={`Réserver ${salon.name}`}
+      onClick={onBook ? (e) => { e.preventDefault(); onBook(salon); } : undefined}
     >
       {/* ── Image ──────────────────────────────────────────── */}
       <div className="relative aspect-[4/3] bg-gradient-to-br from-[#1a2a1a] to-[#0d2d1a] overflow-hidden">
@@ -159,23 +195,45 @@ export function SalonCard({ salon, lang = "fr", onFavoriteToggle, className = ""
         )}
 
         {salon.priceFrom && salon.priceFrom > 0 && (
-          <p className="text-text3 text-[11px] mb-3">
+          <p className="text-text3 text-[11px] mb-2">
             {formatPrice(salon.priceFrom, salon.currency)}
           </p>
         )}
 
+        {/* Créneaux restants — données backend uniquement */}
+        {salon.remainingSlots !== undefined && (
+          <p
+            className="text-[11px] font-semibold mb-2"
+            style={{
+              color: salon.remainingSlots === 0
+                ? "#6B7280"
+                : getIntentColor("success"),
+            }}
+          >
+            {salon.remainingSlots === 0
+              ? (isFr ? "Complet" : "Fully booked")
+              : `${salon.remainingSlots} créneau${salon.remainingSlots > 1 ? "x" : ""} restant${salon.remainingSlots > 1 ? "s" : ""}`}
+          </p>
+        )}
+
+        {/* Preuve sociale — seulement si données réelles >= 20 */}
+        {socialProof && (
+          <p className="text-[10px] text-text3 mb-2">
+            🔥 {salon.weeklyBookings}+ réservations cette semaine
+          </p>
+        )}
+
         <div className="flex items-center justify-between gap-2">
-          <span className="
-            flex-1 text-center py-2 rounded-xl text-xs font-bold
-            bg-g1 text-white
-            group-hover:bg-g3
-            transition-colors duration-150
-          ">
+          <span
+            className="flex-1 text-center py-2 rounded-xl text-xs font-bold text-white transition-opacity"
+            style={{ backgroundColor: getIntentColor("cta") }}
+          >
             {isFr ? "Réserver →" : "Book →"}
           </span>
         </div>
       </div>
     </Link>
+    </motion.div>
   );
 }
 

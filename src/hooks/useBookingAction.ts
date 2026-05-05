@@ -3,28 +3,22 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { v4 as uuid } from "uuid";
 import type { AsyncStatus } from "./useAsyncAction";
+import type { BookingError, Slot } from "@/types";
 
-interface BookingPayload {
-  tenantId:   string;
-  serviceId:  string;
-  slotId:     string;
-  phone?:     string;
-  note?:      string;
+export interface BookingPayload {
+  tenantId:         string;
+  serviceId:        string;
+  slotId:           string;
+  phone?:           string;
+  note?:            string;
   paymentProvider?: string;
 }
 
-interface BookingResult {
+export interface BookingResult {
   id:           string;
   status:       string;
   priceCents:   number;
   depositCents: number;
-}
-
-interface BookingError {
-  code:    string;
-  message: string;
-  /** Créneau alternatif suggéré si SLOT_TAKEN */
-  alternativeSlotId?: string;
 }
 
 export interface UseBookingActionResult {
@@ -128,20 +122,29 @@ export function useBookingAction(): UseBookingActionResult {
         const fetchPromise = fetch("/api/bookings", {
           method:  "POST",
           headers: {
-            "Content-Type":   "application/json",
+            "Content-Type":    "application/json",
             "Idempotency-Key": idempotencyKey,
           },
           credentials: "include",
           signal: controller.signal,
           body:   JSON.stringify({ ...payload, idempotencyKey }),
         }).then(async (res) => {
-          const json = await res.json();
-          if (!res.ok) {
-            const err: BookingError = {
-              code:    json?.error?.code ?? "UNKNOWN",
-              message: json?.error?.message ?? "Erreur inconnue.",
+          const json = (await res.json()) as {
+            data?:  BookingResult;
+            error?: {
+              code?:              string;
+              message?:           string;
+              nextAvailableSlot?: Slot;
             };
-            throw err;
+          };
+          if (!res.ok) {
+            const apiErr: BookingError = {
+              code:               json?.error?.code    ?? "UNKNOWN",
+              message:            json?.error?.message ?? "Erreur inconnue.",
+              type:               json?.error?.code === "SLOT_TAKEN" ? "business" : "unknown",
+              nextAvailableSlot:  json?.error?.nextAvailableSlot,
+            };
+            throw apiErr;
           }
           return json.data as BookingResult;
         });
@@ -181,12 +184,16 @@ export function useBookingAction(): UseBookingActionResult {
         if (err instanceof Error && err.message === "TIMEOUT") {
           safeSet(() => {
             setStatus("error");
-            setError({ code: "TIMEOUT", message: "Délai dépassé. Réessayez." });
+            setError({
+              code:    "TIMEOUT",
+              message: "Délai dépassé. Réessayez.",
+              type:    "network",
+            });
           });
           return null;
         }
 
-        // Erreur métier (BookingError shape)
+        // Erreur métier (BookingError shape from @/types)
         const bookingErr = err as BookingError;
         const isSlotTaken = bookingErr?.code === "SLOT_TAKEN";
 
@@ -197,6 +204,8 @@ export function useBookingAction(): UseBookingActionResult {
             message: isSlotTaken
               ? "Ce créneau vient d'être pris. Choisissez un autre horaire."
               : (bookingErr?.message ?? "Réservation impossible. Réessayez."),
+            type:              isSlotTaken ? "business" : (bookingErr?.type ?? "unknown"),
+            nextAvailableSlot: bookingErr?.nextAvailableSlot,
           });
         });
 

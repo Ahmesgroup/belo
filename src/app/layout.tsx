@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { fraunces, dmSans } from "@/app/fonts";
 import ThemeInit from "@/components/ThemeInit";
 import CookieBanner from "@/components/CookieBanner";
 import { LangProvider } from "@/lib/lang-context";
@@ -28,7 +29,11 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html
+      lang="fr"
+      className={`${fraunces.variable} ${dmSans.variable}`}
+      suppressHydrationWarning
+    >
       <body suppressHydrationWarning>
         {/* Applies the persisted dark/light preference after hydration */}
         <ThemeInit />
