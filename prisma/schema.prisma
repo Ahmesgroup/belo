@@ -334,17 +334,18 @@ model Booking {
   notifLogs        NotificationLog[]
   review           Review?
 
-  // CONTRAINTE ANTI DOUBLE-BOOKING (niveau DB — inviolable)
-  // Un slot ne peut avoir qu'une seule réservation CONFIRMED ou PENDING
-  @@unique([slotId, status], name: "unique_slot_active_booking")
-
   // INDEXES
-  @@index([tenantId, status])           // bookings du jour par statut
-  @@index([tenantId, createdAt])        // analytics revenue
-  @@index([userId])                     // historique client
-  @@index([slotId])                     // lookup slot
-  @@index([idempotencyKey])             // dédup rapide
-  @@index([tenantId, paymentStatus])    // bookings non payés
+  @@index([tenantId, status])         // bookings du jour par statut
+  @@index([tenantId, createdAt])      // analytics revenue
+  @@index([userId])                   // historique client
+  @@index([slotId])                   // lookup slot
+  @@index([tenantId, paymentStatus])  // bookings non payés
+  // NOTE: anti-double-booking guarantee is a PARTIAL UNIQUE INDEX managed
+  // via raw SQL (migration 20260508000000_partial_unique_slot_booking):
+  //   CREATE UNIQUE INDEX "unique_active_booking_per_slot"
+  //   ON "Booking" ("slotId") WHERE status IN ('PENDING','CONFIRMED')
+  // Prisma cannot express partial indexes — do not add @@unique here.
+  // @@index([idempotencyKey]) removed: @unique on the field creates one.
 }
 
 // ============================================================
