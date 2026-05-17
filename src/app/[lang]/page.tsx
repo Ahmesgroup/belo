@@ -10,7 +10,7 @@ import { SalonCard }      from "@/components/ui/SalonCard";
 import { SalonCardSkeleton } from "@/components/ui/SalonCard";
 import { prisma }         from "@/infrastructure/db/prisma";
 import { detectMarket }   from "@/lib/market/detect";
-import { buildEditorialCredit } from "@/lib/market/cities";
+import { buildEditorialCredit, resolveDisplayCity } from "@/lib/market/cities";
 
 export const revalidate = 120;
 
@@ -129,6 +129,7 @@ export default async function LandingPage({ params }: Props) {
     { country, market, lang: isFr ? "fr" : "en" },
     total,
   );
+  const displayCity = resolveDisplayCity({ country, market, lang: isFr ? "fr" : "en" });
 
   const trendingCards = trending.map((tr: any) => toCardData({ ...tr.tenant, trending: { bookings24h: tr.bookings24h, score: tr.score } }));
   const featuredCards = featured.map(toCardData);
@@ -217,7 +218,7 @@ export default async function LandingPage({ params }: Props) {
             <SearchBar
               lang={l}
               placeholder={t("search_service")}
-              cityPlaceholder={isFr ? "Ville" : "City"}
+              cityPlaceholder={displayCity}
               buttonLabel={t("search_btn")}
               className="mb-8"
             />

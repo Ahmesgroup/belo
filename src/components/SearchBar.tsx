@@ -30,7 +30,30 @@ interface SearchBarProps {
 
 const QUICK_CITIES: string[] = [
   "Dakar", "Abidjan", "Casablanca", "Paris", "Bruxelles", "Luxembourg",
-  "Thiès",  "Bamako",   "Rabat",      "Lyon",  "London",
+  "Thiès",  "Bamako",   "Rabat",      "Lyon",  "London", "Genève",
+  "Lisbonne", "Madrid", "Marseille", "Bordeaux", "Nantes",
+];
+
+// Predictive service categories — bilingual, matched against user typing.
+// Each entry routes to /[lang]/salons?cat=<slug>.
+interface ServiceSuggestion {
+  slug:  string;
+  fr:    string;
+  en:    string;
+  alts:  string[]; // alternative keywords for fuzzy match
+}
+
+const SERVICE_SUGGESTIONS: ServiceSuggestion[] = [
+  { slug: "hair",    fr: "Coiffure",       en: "Hair",       alts: ["coiffeur", "cheveux", "hairdresser"] },
+  { slug: "braids",  fr: "Tresses",        en: "Braids",     alts: ["nattes", "box braids", "braiding"] },
+  { slug: "nails",   fr: "Manucure",       en: "Nails",      alts: ["ongles", "manicure", "nail art"] },
+  { slug: "massage", fr: "Massage",        en: "Massage",    alts: ["spa", "détente"] },
+  { slug: "barber",  fr: "Barbier",        en: "Barber",     alts: ["barbe", "barbershop"] },
+  { slug: "spa",     fr: "Spa",            en: "Spa",        alts: ["bien-être", "wellness"] },
+  { slug: "beauty",  fr: "Soins",          en: "Beauty",     alts: ["facial", "esthétique"] },
+  { slug: "makeup",  fr: "Maquillage",     en: "Makeup",     alts: ["make-up", "mua"] },
+  { slug: "waxing",  fr: "Épilation",      en: "Waxing",     alts: ["cire", "hair removal"] },
+  { slug: "eyelash", fr: "Cils",           en: "Eyelash",    alts: ["extensions cils", "lashes"] },
 ];
 
 // ── ICONS (line-art, jamais d'emoji) ─────────────────────────
@@ -81,13 +104,29 @@ export default function SearchBar({
   const [isPending, startTransition] = useTransition();
   const [search,    setSearch]       = useState(defaultSearch);
   const [city,      setCity]         = useState(defaultCity);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [citySuggestions,    setCitySuggestions]    = useState<string[]>([]);
+  const [serviceSuggestions, setServiceSuggestions] = useState<ServiceSuggestion[]>([]);
 
   function handleCityInput(value: string) {
     setCity(value);
-    if (value.length < 2) { setSuggestions([]); return; }
+    if (value.length < 2) { setCitySuggestions([]); return; }
     const q = value.toLowerCase();
-    setSuggestions(QUICK_CITIES.filter(c => c.toLowerCase().startsWith(q)).slice(0, 5));
+    setCitySuggestions(QUICK_CITIES.filter(c => c.toLowerCase().startsWith(q)).slice(0, 5));
+  }
+
+  // Predictive service filter — debounced via simple length gate (≥ 1 char).
+  // Matches the start of FR/EN labels and any alt keyword.
+  function handleServiceInput(value: string) {
+    setSearch(value);
+    if (value.length < 1) { setServiceSuggestions([]); return; }
+    const q = value.toLowerCase();
+    setServiceSuggestions(
+      SERVICE_SUGGESTIONS.filter(s =>
+        s.fr.toLowerCase().startsWith(q) ||
+        s.en.toLowerCase().startsWith(q) ||
+        s.alts.some(alt => alt.toLowerCase().startsWith(q))
+      ).slice(0, 5),
+    );
   }
 
   function handleSearch() {
@@ -98,7 +137,20 @@ export default function SearchBar({
     startTransition(() => {
       router.push(`/${lang}/salons${qs ? "?" + qs : ""}`);
     });
-    setSuggestions([]);
+    setCitySuggestions([]);
+    setServiceSuggestions([]);
+  }
+
+  // Pick a service suggestion → navigate immediately with category filter.
+  function pickService(s: ServiceSuggestion) {
+    const params = new URLSearchParams();
+    params.set("cat", s.slug);
+    if (city.trim()) params.set("city", city.trim());
+    setSearch(lang === "fr" ? s.fr : s.en);
+    setServiceSuggestions([]);
+    startTransition(() => {
+      router.push(`/${lang}/salons?${params.toString()}`);
+    });
   }
 
   // Inputs : fond transparent forcé, aucune border, padding 0 (le label gère
@@ -135,20 +187,54 @@ export default function SearchBar({
       >
         {/* ── Service ──────────────────────────────────────── */}
         <label
-          className="flex items-center gap-3 flex-1 px-5 py-3 sm:py-3.5 cursor-text transition-colors duration-300 rounded-[26px] hover:bg-white/20"
+          className="relative flex items-center gap-3 flex-1 px-5 py-3 sm:py-3.5 cursor-text transition-colors duration-300 rounded-[26px] hover:bg-white/20"
           style={{ color: "var(--warm-mute)" }}
         >
           <SearchIcon />
           <input
             type="text"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => handleServiceInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleSearch()}
+            onFocus={() => { if (search.length >= 1) handleServiceInput(search); }}
             placeholder={placeholder}
             className={inputClass}
             style={inputStyle}
             aria-label={placeholder}
           />
+
+          {/* Predictive service suggestions — soft opacity fade */}
+          {serviceSuggestions.length > 0 && (
+            <ul
+              className="absolute top-full left-0 right-0 mt-3 overflow-hidden z-50"
+              style={{
+                backgroundColor:      "rgba(255,255,255,.85)",
+                backdropFilter:       "blur(14px)",
+                WebkitBackdropFilter: "blur(14px)",
+                border:               "1px solid rgba(255,255,255,.5)",
+                boxShadow:            "0 8px 30px rgba(36,28,24,.06)",
+                borderRadius:         20,
+                animation:            "fadeReveal 280ms cubic-bezier(0.22, 1, 0.36, 1) both",
+              }}
+            >
+              {serviceSuggestions.map(s => (
+                <li key={s.slug}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); pickService(s); }}
+                    className="w-full px-5 py-2.5 text-sm text-left transition-colors duration-300 hover:bg-white/40"
+                    style={{
+                      color:      "var(--text2)",
+                      fontFamily: "var(--font-fraunces, var(--serif))",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {lang === "fr" ? s.fr : s.en}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </label>
 
         {/* Hairline divider — desktop only, ultra subtil */}
@@ -175,25 +261,30 @@ export default function SearchBar({
             aria-label={cityPlaceholder}
           />
 
-          {suggestions.length > 0 && (
+          {citySuggestions.length > 0 && (
             <ul
               className="absolute top-full left-0 right-0 mt-3 overflow-hidden z-50"
               style={{
-                backgroundColor: "rgba(255,255,255,.85)",
-                backdropFilter:  "blur(14px)",
+                backgroundColor:      "rgba(255,255,255,.85)",
+                backdropFilter:       "blur(14px)",
                 WebkitBackdropFilter: "blur(14px)",
-                border:          "1px solid rgba(255,255,255,.5)",
-                boxShadow:       "0 8px 30px rgba(36,28,24,.06)",
-                borderRadius:    20,
+                border:               "1px solid rgba(255,255,255,.5)",
+                boxShadow:            "0 8px 30px rgba(36,28,24,.06)",
+                borderRadius:         20,
+                animation:            "fadeReveal 280ms cubic-bezier(0.22, 1, 0.36, 1) both",
               }}
             >
-              {suggestions.map(c => (
+              {citySuggestions.map(c => (
                 <li key={c}>
                   <button
                     type="button"
-                    onMouseDown={(e) => { e.preventDefault(); setCity(c); setSuggestions([]); }}
+                    onMouseDown={(e) => { e.preventDefault(); setCity(c); setCitySuggestions([]); }}
                     className="w-full px-5 py-2.5 text-sm text-left transition-colors duration-300 hover:bg-white/40"
-                    style={{ color: "var(--text2)" }}
+                    style={{
+                      color:      "var(--text2)",
+                      fontFamily: "var(--font-fraunces, var(--serif))",
+                      fontWeight: 500,
+                    }}
                   >
                     {c}
                   </button>
