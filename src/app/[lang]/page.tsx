@@ -208,21 +208,36 @@ export default async function LandingPage({ params }: Props) {
               className="mb-8"
             />
 
-            {/* Beauty filters — chips intégrés au fond, jamais des boutons UI */}
-            <div className="flex flex-wrap justify-center gap-2">
-              {CATEGORIES.map(cat => (
-                <Link
+            {/* Beauty universes — labels éditoriaux, non cliquables.
+                Le texte communique l'univers, jamais une navigation. */}
+            <div className="flex flex-wrap justify-center items-center gap-x-5 gap-y-3 mt-2">
+              {CATEGORIES.map((cat, i) => (
+                <span
                   key={cat.slug}
-                  href={`/${lang}/salons?cat=${cat.slug}`}
-                  className="px-4 py-2 rounded-full text-xs font-medium tracking-wide transition-colors duration-300"
-                  style={{
-                    backgroundColor: "rgba(255,255,255,.45)",
-                    color:           "var(--text2)",
-                    backdropFilter:  "blur(6px)",
-                  }}
+                  className="inline-flex items-center"
                 >
-                  {isFr ? cat.labelFr : cat.labelEn}
-                </Link>
+                  <span
+                    className="text-[12px] tracking-[0.04em] transition-opacity duration-[400ms]"
+                    style={{
+                      color:      "var(--text2)",
+                      opacity:    0.72,
+                      fontFamily: "var(--font-fraunces, var(--serif))",
+                      fontWeight: 500,
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {isFr ? cat.labelFr : cat.labelEn}
+                  </span>
+                  {i < CATEGORIES.length - 1 && (
+                    <span
+                      className="ml-5 text-[8px]"
+                      style={{ color: "var(--warm-mute)", opacity: 0.4 }}
+                      aria-hidden="true"
+                    >
+                      ●
+                    </span>
+                  )}
+                </span>
               ))}
             </div>
           </div>
@@ -281,38 +296,39 @@ export default async function LandingPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── CATEGORIES — éditorial sans cards ─────────────── */}
-        <section className="px-5 py-16 max-w-5xl mx-auto">
+        {/* ── BEAUTY UNIVERSES — moods éditoriaux, jamais des liens ─
+            La rangée n'est PAS une navigation. Aucun Link, aucun arrow.
+            Pure typographie magazine : un univers beauté par label. */}
+        <section className="px-5 py-20 max-w-5xl mx-auto" aria-label={isFr ? "Univers beauté" : "Beauty universes"}>
           <h2
             className="font-heading text-3xl font-semibold mb-2 text-center"
             style={{ color: "var(--text)", letterSpacing: "-0.015em" }}
           >
-            {isFr ? "Explorez par envie" : "Browse by mood"}
+            {isFr ? "Univers beauté" : "Beauty universes"}
           </h2>
-          <p className="text-xs uppercase tracking-[0.18em] text-center mb-10" style={{ color: "var(--warm-mute)" }}>
+          <p className="text-xs uppercase tracking-[0.18em] text-center mb-14" style={{ color: "var(--warm-mute)" }}>
             {isFr ? "Pour chaque rituel" : "For every ritual"}
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-6">
+
+          {/* Layout éditorial — libre, respirant, jamais une grille de boutons */}
+          <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-8">
             {CATEGORIES.map(cat => (
-              <Link
+              <span
                 key={cat.slug}
-                href={`/${lang}/salons?cat=${cat.slug}`}
-                className="group flex flex-col items-center text-center transition-opacity duration-500"
-                style={{ opacity: 0.85 }}
+                className="inline-block text-center transition-opacity duration-[400ms]"
+                style={{
+                  opacity:       0.72,
+                  fontFamily:    "var(--font-fraunces, var(--serif))",
+                  fontWeight:    500,
+                  fontSize:      18,
+                  color:         "var(--text)",
+                  letterSpacing: "-0.01em",
+                  // Pas d'interaction — pas de cursor, pas de hover navigation
+                  cursor:        "default",
+                }}
               >
-                <span
-                  className="font-heading text-base font-medium transition-colors duration-300"
-                  style={{ color: "var(--text)" }}
-                >
-                  {isFr ? cat.labelFr : cat.labelEn}
-                </span>
-                <span
-                  className="mt-1 text-[10px] uppercase tracking-[0.2em]"
-                  style={{ color: "var(--warm-mute)" }}
-                >
-                  →
-                </span>
-              </Link>
+                {isFr ? cat.labelFr : cat.labelEn}
+              </span>
             ))}
           </div>
         </section>
