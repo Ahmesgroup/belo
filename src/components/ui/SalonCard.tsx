@@ -164,7 +164,10 @@ export function SalonCard({
               loading="lazy"
               decoding="async"
               onError={() => setImgErr(true)}
-              className="w-full h-full object-cover transition-transform duration-[700ms] ease-out group-hover:scale-[1.04]"
+              className="w-full h-full object-cover transition-transform duration-[1200ms] group-hover:scale-[1.035]"
+              style={{
+                transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
             />
           ) : (
             <div

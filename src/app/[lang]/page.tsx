@@ -131,11 +131,35 @@ export default async function LandingPage({ params }: Props) {
             background: "linear-gradient(180deg, var(--cream) 0%, var(--blush) 100%)",
           }}
         >
-          {/* Glow chaud — champagne diffus, jamais perceptible consciemment */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {/* Cinematic light system — three layered glows, slow breathing.
+              Champagne center / soft-peach left / dusty-rose right.
+              The breath is 18s — imperceptible to the conscious eye. */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
             <div
-              className="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full blur-3xl opacity-60"
-              style={{ background: "radial-gradient(circle, rgba(217,194,176,.35) 0%, transparent 70%)" }}
+              className="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full blur-3xl"
+              style={{
+                background: "radial-gradient(circle, rgba(217,194,176,.35) 0%, transparent 70%)",
+                opacity:    0.6,
+                animation:  "ambient-breathe 18s ease-in-out infinite",
+              }}
+            />
+            <div
+              className="absolute top-32 left-0 w-[420px] h-[420px] rounded-full blur-3xl"
+              style={{
+                background: "radial-gradient(circle, rgba(245,215,200,.22) 0%, transparent 65%)",
+                opacity:    0.85,
+                animation:  "ambient-breathe 22s ease-in-out infinite reverse",
+                transform:  "translateX(-30%)",
+              }}
+            />
+            <div
+              className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full blur-3xl"
+              style={{
+                background: "radial-gradient(circle, rgba(232,208,203,.18) 0%, transparent 65%)",
+                opacity:    0.75,
+                animation:  "ambient-breathe 26s ease-in-out infinite",
+                transform:  "translate(20%, 20%)",
+              }}
             />
           </div>
 
