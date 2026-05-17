@@ -425,6 +425,91 @@ body:has([data-market="europe"]) {
   color: var(--warm-mute);
 }
 
+/* ============================================================
+   MOBILE TACTILE SYSTEM
+   Africa is mobile-first reality. Mobile must feel softer than
+   desktop — never compressed, never adapted-from-desktop.
+   "Like moving through warm fabric and light."
+   ============================================================ */
+
+@media (max-width: 768px) {
+  /* More vertical breath on small screens */
+  body { line-height: 1.78; }
+
+  /* Editorial spacing — finger-friendly rhythm */
+  h1, h2, h3 { letter-spacing: -0.02em; }
+
+  /* Inputs lose the boxed feeling on mobile too */
+  input,
+  select,
+  textarea {
+    border-radius: 14px;
+    padding: 12px 16px;
+    font-size: 15px; /* ≥ 16px avoid iOS zoom; 15 + viewport-meta is fine */
+  }
+
+  /* Scrollbars disappear on mobile — touch-native scroll */
+  ::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+  /* Cinematic scrolling — momentum + soft snap behavior on supporting browsers */
+  html { scroll-behavior: smooth; }
+
+  /* Soften the legal reading list bullets on mobile */
+  .legal-reading ul li { padding-left: 20px; }
+}
+
+/* ============================================================
+   SOUNDLESS LUXURY — universal refinements
+   Lower contrast, more breath, never visual noise.
+   "Calming the nervous system, not impressing the user."
+   ============================================================ */
+
+/* Selection — almost imperceptible, no marketing green */
+::selection {
+  background: rgba(217, 194, 176, 0.35);
+  color: var(--text);
+}
+
+/* Focus ring — warm champagne, never marketing green */
+*:focus-visible {
+  outline: 2px solid rgba(217, 194, 176, 0.55);
+  outline-offset: 3px;
+  border-radius: 6px;
+  transition: outline-color 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Anchor links — soft underlines, never visited purple */
+a:not([class]) {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border2);
+  transition: text-decoration-color 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+a:not([class]):hover {
+  text-decoration-color: var(--text);
+}
+
+/* Calm form transitions */
+input,
+select,
+textarea {
+  transition:
+    border-color    320ms cubic-bezier(0.22, 1, 0.36, 1),
+    background      320ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow      320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Input focus — champagne glow, not green */
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(217, 194, 176, 0.55);
+  background:   var(--card);
+  box-shadow:   0 0 0 4px rgba(217, 194, 176, 0.14);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar               { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track         { background: var(--bg2); }
