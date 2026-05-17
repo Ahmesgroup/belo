@@ -17,11 +17,13 @@
  */
 
 import Link              from "next/link";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { motion }        from "framer-motion";
 import { staggerItem, tap } from "@/lib/motion/presets";
 import { getIntentColor } from "@/lib/design/intent";
 import { preloadSlots }  from "@/lib/cache/slotCache";
+import { deriveTrustSignals } from "@/lib/trust/signals";
+import { detectMarket }       from "@/lib/market/detect";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -43,6 +45,26 @@ export interface SalonCardData {
   remainingSlots?: number;
   /** Réservations de la semaine — pour la preuve sociale */
   weeklyBookings?: number;
+  // ── Trust signal source fields ──────────────────────────────
+  // All optional. If absent, no signal is displayed. Absence > manipulation.
+  /** Tenant.status === "ACTIVE" + manual verification flag passed */
+  isVerified?:        boolean;
+  /** Number of salon-owned (non-stock) photos */
+  realPhotoCount?:    number;
+  /** Wave payment configured + last 30d had >= 1 success */
+  waveActive?:        boolean;
+  /** Stripe Connect onboarded + payouts enabled */
+  stripeActive?:      boolean;
+  /** Avg confirmation latency in minutes over last 14d */
+  avgConfirmMinutes?: number;
+  /** TenantMetrics.confirmationRate (0..1) over last 30d */
+  confirmationRate?:  number;
+  /** Bookings created today (real number from DB) */
+  bookingsToday?:     number;
+  /** Number of reviews — 5 minimum to qualify for 'highly rated' */
+  reviewCount?:       number;
+  /** Days since tenant.createdAt */
+  daysSinceCreation?: number;
 }
 
 interface SalonCardProps {
@@ -137,6 +159,43 @@ export function SalonCard({
                           && salon.remainingSlots <= 3;
   const isFullyBooked   = salon.remainingSlots === 0;
 
+  // ── Trust signals — backend-verified only, max 2 displayed ──
+  // If the source field is undefined, no signal is returned. Silent > fake.
+  const trustSignals = useMemo(() => {
+    const market = detectMarket({ lang: isFr ? "fr" : "en" });
+    return deriveTrustSignals(
+      {
+        isVerified:        salon.isVerified,
+        realPhotoCount:    salon.realPhotoCount,
+        waveActive:        salon.waveActive,
+        stripeActive:      salon.stripeActive,
+        avgConfirmMinutes: salon.avgConfirmMinutes,
+        ratingAvg:         salon.ratingAvg,
+        reviewCount:       salon.reviewCount,
+        confirmationRate:  salon.confirmationRate,
+        bookingsToday:     salon.bookingsToday,
+        remainingSlots:    salon.remainingSlots,
+        daysSinceCreation: salon.daysSinceCreation,
+      },
+      isFr ? "fr" : "en",
+      market,
+      2,
+    );
+  }, [
+    isFr,
+    salon.isVerified,
+    salon.realPhotoCount,
+    salon.waveActive,
+    salon.stripeActive,
+    salon.avgConfirmMinutes,
+    salon.ratingAvg,
+    salon.reviewCount,
+    salon.confirmationRate,
+    salon.bookingsToday,
+    salon.remainingSlots,
+    salon.daysSinceCreation,
+  ]);
+
   return (
     <motion.div
       variants={staggerItem}
@@ -153,11 +212,10 @@ export function SalonCard({
       >
         {/* ── IMAGE — élément dominant ─────────────────────── */}
         <div
-          className="relative aspect-[4/5] overflow-hidden"
+          className="relative aspect-[4/5] overflow-hidden beauty-photo"
           style={{ borderRadius: 28 }}
         >
           {salon.coverUrl && !imgErr ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={salon.coverUrl}
               alt={salon.name}
@@ -262,6 +320,17 @@ export function SalonCard({
           >
             {salon.name}
           </h3>
+
+          {/* Trust signals — backend-verified, max 2.
+              Each signal MUST be real. Silent if no data. */}
+          {trustSignals.length > 0 && (
+            <p
+              className="text-[10px] uppercase tracking-[0.16em] mb-2"
+              style={{ color: "var(--warm-mute)" }}
+            >
+              {trustSignals.map(s => s.label).join(" · ")}
+            </p>
+          )}
 
           {/* Prix — discret */}
           {salon.priceFrom && salon.priceFrom > 0 && (

@@ -63,7 +63,6 @@ function SalonCard({
         style={{ width: 56, height: 56 }}
       >
         {salon.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={salon.photoUrl}
             alt={salon.name}

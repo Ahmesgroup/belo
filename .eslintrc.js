@@ -11,8 +11,11 @@ module.exports = {
     ecmaFeatures: { jsx: true },
   },
   plugins: ["@typescript-eslint"],
+  // NOTE: 'next/core-web-vitals' removed — eslint-config-next has a circular
+  // structure incompatible with current @eslint/eslintrc validator (Next 16
+  // also deprecated `next lint`). Type checking is enforced by `next build`
+  // (TypeScript strict). The rules below are the BELO design-system guards.
   extends: [
-    "next/core-web-vitals",
     "plugin:@typescript-eslint/recommended",
   ],
   rules: {
@@ -66,7 +69,7 @@ module.exports = {
 
     // ── REACT / NEXT ─────────────────────────────────────────────
     "react/no-unescaped-entities": "off",
-    "@next/next/no-img-element": "error", // enforce next/image
+    // "@next/next/no-img-element" removed — Next plugin no longer loaded
   },
 
   overrides: [

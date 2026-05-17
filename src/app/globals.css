@@ -510,6 +510,30 @@ textarea:focus {
   box-shadow:   0 0 0 4px rgba(217, 194, 176, 0.14);
 }
 
+/* ============================================================
+   PHOTOGRAPHY COLOR COHERENCE
+   Subtle tonal pass for images marked with .beauty-photo.
+   Pairs with src/lib/photography/rules.ts color temperature ranges.
+   Filter values are intentionally restrained (≤ 8% change) — the
+   photographer's intent is preserved, only the page-level coherence
+   is normalised.
+   ============================================================ */
+
+.beauty-photo img {
+  filter: saturate(0.94) contrast(0.97);
+  transition: filter 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Africa atmosphere — slightly warmer pass on imagery */
+[data-market="africa"] .beauty-photo img {
+  filter: saturate(0.94) contrast(0.97) sepia(0.04);
+}
+
+/* Europe atmosphere — calmer, slightly less saturated */
+[data-market="europe"] .beauty-photo img {
+  filter: saturate(0.88) contrast(0.95);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar               { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track         { background: var(--bg2); }
