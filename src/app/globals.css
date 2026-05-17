@@ -132,14 +132,16 @@
    ============================================================ */
 
 :root {
-  /* Light theme (default — matches new-user default in ThemeInit) */
-  --bg:    #f7f5f1;
-  --bg2:   #ffffff;
-  --card:  #ffffff;
-  --card2: #f0ede8;
+  /* ── BEAUTY EDITORIAL PALETTE — v0.5.0 ───────────────────────
+     90% feminine, 10% technology. Warm cream tones, never pure white.
+     Glossier × Aesop × Treatwell, never Stripe × Vercel × Linear. */
+  --bg:    #FFF9F5;   /* base — warm ivory */
+  --bg2:   #FCFAF8;   /* surface — soft cream */
+  --card:  #FCFAF8;   /* cards — never pure white */
+  --card2: #F7F2EE;   /* sunken — sand */
 
-  --border:  rgba(0,0,0,.09);
-  --border2: rgba(0,0,0,.16);
+  --border:  rgba(67,42,28,.07);   /* warm-tinted borders, very subtle */
+  --border2: rgba(67,42,28,.13);
 
   --g:      linear-gradient(135deg,#0d9e6e,#22d38a);
   --g1:     #0d9e6e;
@@ -166,8 +168,14 @@
   --r:  12px;
   --r2: 16px;
 
-  --shadow:  0 4px 24px rgba(0,0,0,.12);
-  --nav-bg:  rgba(247,245,241,.97);
+  /* Soft editorial shadows — never harsh */
+  --shadow:           0 4px 24px rgba(67,42,28,.06);
+  --shadow-editorial: 0 8px 30px rgba(67,42,28,.04);
+  --shadow-soft:      0 2px 12px rgba(67,42,28,.04);
+  --nav-bg:           rgba(255,249,245,.92);
+
+  /* Editorial radius — organic, never sharp */
+  --radius-editorial: 28px;
 }
 
 [data-theme="dark"] {
@@ -223,9 +231,16 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   font-size: 14px;
-  line-height: 1.6;
+  /* Editorial breathing — magazine feel */
+  line-height: 1.7;
   min-height: 100vh;
   transition: background .25s ease, color .2s ease;
+}
+
+/* Editorial heading spacing — headlines need to breathe */
+h1, h2, h3 {
+  line-height: 1.15;
+  letter-spacing: -0.015em;
 }
 
 /* Subtle noise texture */

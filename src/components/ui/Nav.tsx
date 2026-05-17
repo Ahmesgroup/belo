@@ -4,9 +4,10 @@ import { useLang } from "@/hooks/useLang";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getUser, clearAuth } from "@/lib/auth-client";
+import { LangSwitcher } from "./LangSwitcher";
 
 export function PublicNav() {
-  const { lang, setLang, t } = useLang();
+  const { lang, t } = useLang();
   const [user,     setUser]     = useState<{ name?: string; role?: string } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -78,10 +79,9 @@ export function PublicNav() {
               style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 9px",fontSize:14,cursor:"pointer",color:"var(--text2)",lineHeight:1,flexShrink:0}}>
               {theme==="dark" ? "☀️" : "🌙"}
             </button>
-            <button onClick={()=>setLang(lang==="fr"?"en":"fr")} title="Change language"
-              style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:8,padding:"5px 9px",fontSize:12,fontWeight:600,cursor:"pointer",color:"var(--text2)",lineHeight:1,flexShrink:0,minWidth:38}}>
-              {lang==="fr"?"EN":"FR"}
-            </button>
+            {/* URL-based language switcher — same logic as footer */}
+            <LangSwitcher currentLang={lang} style={{ flexShrink: 0 }} />
+
             {user ? (
               <>
                 <Link href={destAccount} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 12px",borderRadius:9,fontSize:12,fontWeight:600,background:"rgba(34,211,138,.1)",border:"1px solid rgba(34,211,138,.2)",color:"var(--g2)",textDecoration:"none"}}>

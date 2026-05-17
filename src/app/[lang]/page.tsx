@@ -3,6 +3,7 @@ import Link               from "next/link";
 import type { Metadata }  from "next";
 import { getTranslations, isValidLang, SEO_META, type SupportedLang } from "@/lib/i18n-server";
 import { PublicNav }      from "@/components/ui/Nav";
+import { LangSwitcher }   from "@/components/ui/LangSwitcher";
 import SearchBar          from "@/components/SearchBar";
 import { SalonCard }      from "@/components/ui/SalonCard";
 import { SalonCardSkeleton } from "@/components/ui/SalonCard";
@@ -327,10 +328,8 @@ export default async function LandingPage({ params }: Props) {
                 <Link key={label} href={href} className="hover:text-g2 transition-colors">{label}</Link>
               ))}
             </nav>
-            <div className="flex gap-2">
-              <Link href="/fr" hrefLang="fr" className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${lang === "fr" ? "border-g2/40 text-g2 bg-g2/10" : "border-border2 text-text3 hover:text-text"}`}>🇫🇷 FR</Link>
-              <Link href="/en" hrefLang="en" className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${lang === "en" ? "border-g2/40 text-g2 bg-g2/10" : "border-border2 text-text3 hover:text-text"}`}>🇬🇧 EN</Link>
-            </div>
+            <LangSwitcher currentLang={lang} />
+
           </div>
           <p className="text-center text-xs text-text3 mt-5">© 2026 Belo · Dakar · Paris · Bruxelles — {t("footer_tagline")}</p>
         </footer>

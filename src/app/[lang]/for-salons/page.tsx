@@ -7,6 +7,7 @@ import Link              from "next/link";
 import type { Metadata } from "next";
 import { getTranslations, isValidLang, type SupportedLang } from "@/lib/i18n-server";
 import { PublicNav }     from "@/components/ui/Nav";
+import { LangSwitcher }  from "@/components/ui/LangSwitcher";
 import { prisma }        from "@/infrastructure/db/prisma";
 
 export const revalidate = 3600; // 1 hour — social-proof numbers
@@ -314,8 +315,7 @@ export default async function ForSalonsPage({ params }: Props) {
         {/* Footer minimal */}
         <footer className="px-5 py-8 border-t border-border text-center">
           <div className="flex gap-3 justify-center">
-            <Link href="/fr/for-salons" hrefLang="fr" className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${lang === "fr" ? "border-g2/40 text-g2 bg-g2/10" : "border-border2 text-text3 hover:text-text"}`}>🇫🇷 FR</Link>
-            <Link href="/en/for-salons" hrefLang="en" className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${lang === "en" ? "border-g2/40 text-g2 bg-g2/10" : "border-border2 text-text3 hover:text-text"}`}>🇬🇧 EN</Link>
+            <LangSwitcher currentLang={lang} />
           </div>
         </footer>
       </main>
