@@ -434,7 +434,13 @@ body:has([data-market="europe"]) {
 
 @media (max-width: 768px) {
   /* More vertical breath on small screens */
-  body { line-height: 1.78; }
+  body {
+    line-height: 1.78;
+    /* Slightly larger base — Senegal is mobile-first, fingers > pixels */
+    font-size: 15px;
+    /* Thumb-zone safety — bottom 96px is hard to reach, give it air */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
 
   /* Editorial spacing — finger-friendly rhythm */
   h1, h2, h3 { letter-spacing: -0.02em; }
@@ -444,18 +450,63 @@ body:has([data-market="europe"]) {
   select,
   textarea {
     border-radius: 14px;
-    padding: 12px 16px;
-    font-size: 15px; /* ≥ 16px avoid iOS zoom; 15 + viewport-meta is fine */
+    padding: 14px 18px;       /* generous padding for thumb tap */
+    font-size: 16px;          /* ≥ 16px prevents iOS auto-zoom */
+    min-height: 44px;         /* iOS HIG minimum tap target */
+  }
+
+  /* Touch targets — every clickable thing reaches at least 44px tall */
+  button,
+  a {
+    /* Ensure tap regions are comfortable for thumbs */
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  a[role="button"] {
+    min-height: 44px;
   }
 
   /* Scrollbars disappear on mobile — touch-native scroll */
   ::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
-  /* Cinematic scrolling — momentum + soft snap behavior on supporting browsers */
-  html { scroll-behavior: smooth; }
+  /* Cinematic scrolling — momentum is now native everywhere.
+     Contain rubber-banding so the warm atmosphere never breaks. */
+  html {
+    scroll-behavior: smooth;
+    overscroll-behavior-y: contain;
+  }
 
   /* Soften the legal reading list bullets on mobile */
   .legal-reading ul li { padding-left: 20px; }
+
+  /* Dashboard pages — give thumb zone 64px clearance from bottom */
+  body > main,
+  body > div[data-market] > * {
+    padding-bottom: 64px;
+  }
+
+  /* Toast stack — stay clear of bottom nav + thumb zone on mobile */
+  .dashboard-toast-stack {
+    bottom: calc(env(safe-area-inset-bottom, 0) + 80px) !important;
+  }
+
+  /* Booking actions — stack on mobile for thumb confidence */
+  .dashboard-booking-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px !important;
+  }
+}
+
+/* ============================================================
+   OLED NIGHT COMFORT — Senegal phones run OLED + bright sun.
+   In dark mode, slightly reduce pure white to save battery and
+   eye strain on AMOLED displays.
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  /* The existing [data-theme="dark"] handles this — we just
+     enforce a softer luminance ceiling on warm tones */
+  body { -webkit-font-smoothing: subpixel-antialiased; }
 }
 
 /* ============================================================
