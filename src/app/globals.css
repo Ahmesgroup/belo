@@ -132,16 +132,28 @@
    ============================================================ */
 
 :root {
-  /* ── BEAUTY EDITORIAL PALETTE — v0.5.0 ───────────────────────
-     90% feminine, 10% technology. Warm cream tones, never pure white.
-     Glossier × Aesop × Treatwell, never Stripe × Vercel × Linear. */
-  --bg:    #FFF9F5;   /* base — warm ivory */
-  --bg2:   #FCFAF8;   /* surface — soft cream */
-  --card:  #FCFAF8;   /* cards — never pure white */
-  --card2: #F7F2EE;   /* sunken — sand */
+  /* ── BEAUTY EDITORIAL PALETTE — v0.6.0 ───────────────────────
+     90% feminine, 10% technology. Cream, blush, nude, champagne.
+     Glossier × Aesop × Rhode × Treatwell — never Stripe / Uber / dashboard. */
 
-  --border:  rgba(67,42,28,.07);   /* warm-tinted borders, very subtle */
-  --border2: rgba(67,42,28,.13);
+  /* Named beauty tokens — usable directly: var(--cream), var(--blush), etc. */
+  --cream:      #FCF8F5;
+  --warm-cream: #F6EEE8;
+  --blush:      #F4E7E1;
+  --nude:       #EADFD7;
+  --champagne:  #D9C2B0;
+  --espresso:   #241C18;   /* warm dark — replaces harsh black */
+  --warm-text:  #3A312D;   /* warm medium */
+  --warm-mute:  #8A7E76;   /* warm gray for meta text */
+
+  /* Aliased palette — what components actually use */
+  --bg:    var(--cream);        /* base — magazine paper */
+  --bg2:   var(--warm-cream);   /* sections */
+  --card:  var(--warm-cream);   /* cards — never pure white */
+  --card2: var(--blush);        /* sunken surfaces — soft pink-cream */
+
+  --border:  rgba(67,42,28,.06);   /* warm-tinted borders, near invisible */
+  --border2: rgba(67,42,28,.11);
 
   --g:      linear-gradient(135deg,#0d9e6e,#22d38a);
   --g1:     #0d9e6e;
@@ -156,9 +168,10 @@
   --blue:    #2563eb;
   --yellow:  #d97706;
 
-  --text:  #111827;
-  --text2: #374151;
-  --text3: #6b7280;
+  /* Warm espresso tones — never harsh black */
+  --text:  var(--espresso);   /* #241C18 */
+  --text2: var(--warm-text);  /* #3A312D */
+  --text3: var(--warm-mute);  /* #8A7E76 */
 
   /* Typography */
   --serif: 'Sora', sans-serif;
@@ -232,7 +245,8 @@ body {
   -webkit-font-smoothing: antialiased;
   font-size: 14px;
   /* Editorial breathing — magazine feel */
-  line-height: 1.7;
+  line-height: 1.75;
+  font-weight: 400;
   min-height: 100vh;
   transition: background .25s ease, color .2s ease;
 }

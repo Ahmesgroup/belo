@@ -124,43 +124,79 @@ export default async function LandingPage({ params }: Props) {
       <PublicNav />
       <main className="bg-bg text-text min-h-screen">
 
-        {/* ── HERO ──────────────────────────────────────────── */}
-        <section className="relative overflow-hidden pt-24 pb-16 px-5">
+        {/* ── HERO — éditorial beauté ────────────────────────── */}
+        <section
+          className="relative overflow-hidden pt-28 pb-20 px-5"
+          style={{
+            background: "linear-gradient(180deg, var(--cream) 0%, var(--blush) 100%)",
+          }}
+        >
+          {/* Glow chaud — champagne diffus, jamais perceptible consciemment */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full bg-g2/[0.06] blur-3xl" />
-            <div className="absolute top-20 -right-20 w-64 h-64 rounded-full bg-blue/[0.04] blur-3xl" />
+            <div
+              className="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full blur-3xl opacity-60"
+              style={{ background: "radial-gradient(circle, rgba(217,194,176,.35) 0%, transparent 70%)" }}
+            />
           </div>
 
           <div className="relative z-10 max-w-3xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 bg-g2/10 border border-g2/20 text-g2 text-xs font-semibold px-4 py-1.5 rounded-full mb-7">
-              <span className="w-1.5 h-1.5 rounded-full bg-g2 animate-pulse" />
-              ✦ {isFr ? `${total}+ salons disponibles` : `${total}+ salons available`}
-            </div>
+            {/* Crédit éditorial — uppercase letter-spacing, sans pill */}
+            <p
+              className="text-[10px] uppercase tracking-[0.3em] mb-8 font-medium"
+              style={{ color: "var(--warm-mute)" }}
+            >
+              {isFr ? `Édition Dakar · ${total} salons` : `Dakar edition · ${total} salons`}
+            </p>
 
-            <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-tight tracking-tight mb-5">
-              {t("hero_title")}<br />
-              <span className="text-g2 italic">{t("hero_title2")}</span>
+            {/* Titre — Fraunces editorial, poids 600 (pas extrabold), italique pour l'accent */}
+            <h1
+              className="font-heading mb-6"
+              style={{
+                fontSize:    "clamp(2.5rem, 6vw, 4.5rem)",
+                fontWeight:  600,
+                lineHeight:  1.1,
+                letterSpacing: "-0.015em",
+                color:       "var(--text)",
+              }}
+            >
+              {t("hero_title")}{" "}
+              <span style={{ fontStyle: "italic", fontWeight: 600 }}>
+                {t("hero_title2")}
+              </span>
             </h1>
 
-            <p className="text-text2 text-lg max-w-xl mx-auto mb-8 leading-relaxed">{t("hero_desc")}</p>
+            <p
+              className="text-base max-w-xl mx-auto mb-10"
+              style={{
+                color:      "var(--text2)",
+                lineHeight: 1.7,
+                fontWeight: 400,
+              }}
+            >
+              {t("hero_desc")}
+            </p>
 
             <SearchBar
               lang={l}
               placeholder={t("search_service")}
               cityPlaceholder={isFr ? "Ville" : "City"}
               buttonLabel={t("search_btn")}
-              className="mb-6"
+              className="mb-8"
             />
 
-            {/* Quick category pills */}
+            {/* Beauty filters — chips intégrés au fond, jamais des boutons UI */}
             <div className="flex flex-wrap justify-center gap-2">
               {CATEGORIES.map(cat => (
                 <Link
                   key={cat.slug}
                   href={`/${lang}/salons?cat=${cat.slug}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border text-xs font-semibold text-text2 hover:border-g2/40 hover:text-g2 hover:bg-g2/5 transition-all duration-150"
+                  className="px-4 py-2 rounded-full text-xs font-medium tracking-wide transition-colors duration-300"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,.45)",
+                    color:           "var(--text2)",
+                    backdropFilter:  "blur(6px)",
+                  }}
                 >
-                  <span aria-hidden="true">{cat.emoji}</span>
                   {isFr ? cat.labelFr : cat.labelEn}
                 </Link>
               ))}
@@ -173,11 +209,11 @@ export default async function LandingPage({ params }: Props) {
           <section className="px-5 py-10 max-w-6xl mx-auto" aria-label={isFr ? "Tendances" : "Trending"}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="font-serif text-xl font-bold flex items-center gap-2">
-                  🔥 {isFr ? "Très demandés en ce moment" : "Trending right now"}
+                <h2 className="font-heading text-2xl font-semibold tracking-tight" style={{ color: "var(--text)" }}>
+                  {isFr ? "Très demandés" : "Most loved"}
                 </h2>
-                <p className="text-text3 text-xs mt-0.5">
-                  {isFr ? "Les salons les plus réservés aujourd'hui" : "Most booked salons today"}
+                <p className="text-xs mt-1 uppercase tracking-[0.18em]" style={{ color: "var(--warm-mute)" }}>
+                  {isFr ? "Sélection du jour" : "Today's edit"}
                 </p>
               </div>
               <Link href={`/${lang}/salons`} className="text-g2 text-sm font-semibold hover:text-g3 hidden sm:block">
@@ -199,11 +235,11 @@ export default async function LandingPage({ params }: Props) {
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="font-serif text-xl font-bold flex items-center gap-2">
-                  ✨ {isFr ? "Salons en vedette" : "Featured salons"}
+                <h2 className="font-heading text-2xl font-semibold tracking-tight" style={{ color: "var(--text)" }}>
+                  {isFr ? "Nos coups de cœur" : "Editor's picks"}
                 </h2>
-                <p className="text-text3 text-xs mt-0.5">
-                  {isFr ? "Sélectionnés pour leur qualité" : "Selected for their quality"}
+                <p className="text-xs mt-1 uppercase tracking-[0.18em]" style={{ color: "var(--warm-mute)" }}>
+                  {isFr ? "Choisis avec soin" : "Hand-picked"}
                 </p>
               </div>
               <Link href={`/${lang}/salons`} className="text-g2 text-sm font-semibold hover:text-g3">
@@ -221,21 +257,36 @@ export default async function LandingPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── CATEGORIES ────────────────────────────────────── */}
-        <section className="px-5 py-12 max-w-6xl mx-auto">
-          <h2 className="font-serif text-xl font-bold mb-6 text-center">
-            {isFr ? "Explorez par catégorie" : "Browse by category"}
+        {/* ── CATEGORIES — éditorial sans cards ─────────────── */}
+        <section className="px-5 py-16 max-w-5xl mx-auto">
+          <h2
+            className="font-heading text-3xl font-semibold mb-2 text-center"
+            style={{ color: "var(--text)", letterSpacing: "-0.015em" }}
+          >
+            {isFr ? "Explorez par envie" : "Browse by mood"}
           </h2>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          <p className="text-xs uppercase tracking-[0.18em] text-center mb-10" style={{ color: "var(--warm-mute)" }}>
+            {isFr ? "Pour chaque rituel" : "For every ritual"}
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-6">
             {CATEGORIES.map(cat => (
               <Link
                 key={cat.slug}
                 href={`/${lang}/salons?cat=${cat.slug}`}
-                className="group flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border border-border hover:border-g2/40 hover:bg-g2/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-soft"
+                className="group flex flex-col items-center text-center transition-opacity duration-500"
+                style={{ opacity: 0.85 }}
               >
-                <span className="text-3xl" aria-hidden="true">{cat.emoji}</span>
-                <span className="text-xs font-semibold text-text2 group-hover:text-g2 transition-colors text-center">
+                <span
+                  className="font-heading text-base font-medium transition-colors duration-300"
+                  style={{ color: "var(--text)" }}
+                >
                   {isFr ? cat.labelFr : cat.labelEn}
+                </span>
+                <span
+                  className="mt-1 text-[10px] uppercase tracking-[0.2em]"
+                  style={{ color: "var(--warm-mute)" }}
+                >
+                  →
                 </span>
               </Link>
             ))}
@@ -313,25 +364,52 @@ export default async function LandingPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── FOOTER ────────────────────────────────────────── */}
-        <footer className="px-5 py-8 border-t border-border">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5">
-            <div className="font-serif text-xl font-extrabold">belo<span className="text-g2">.</span></div>
-            <nav className="flex flex-wrap gap-5 text-xs text-text3 justify-center">
-              {[
-                [isFr ? "Accueil" : "Home", `/${lang}`],
-                [isFr ? "Salons" : "Salons", `/${lang}/salons`],
-                ["Plans", `/${lang}/plans`],
-                [isFr ? "Pour les gérants" : "For salons", `/${lang}/for-salons`],
-                [isFr ? "Confidentialité" : "Privacy", "/confidentialite"],
-              ].map(([label, href]) => (
-                <Link key={label} href={href} className="hover:text-g2 transition-colors">{label}</Link>
-              ))}
-            </nav>
-            <LangSwitcher currentLang={lang} />
+        {/* ── FOOTER — éditorial, silencieux ────────────────── */}
+        <footer className="px-5 pt-20 pb-12">
+          <div className="max-w-5xl mx-auto">
+            {/* Séparateur très subtil — hairline, pas une border */}
+            <div
+              className="h-px w-full mb-12 mx-auto max-w-md"
+              style={{ background: "var(--border)" }}
+            />
 
+            <div className="flex flex-col items-center text-center gap-6">
+              <div
+                className="font-heading text-2xl"
+                style={{ color: "var(--text)", fontWeight: 600, letterSpacing: "-0.02em" }}
+              >
+                belo<span style={{ color: "var(--color-primary)" }}>.</span>
+              </div>
+
+              <nav className="flex flex-wrap justify-center gap-x-8 gap-y-3 text-[12px]">
+                {[
+                  [isFr ? "Accueil"        : "Home",         `/${lang}`],
+                  [isFr ? "Salons"         : "Salons",       `/${lang}/salons`],
+                  [isFr ? "Tarifs"         : "Pricing",      `/${lang}/plans`],
+                  [isFr ? "Pour les salons" : "For salons",  `/${lang}/for-salons`],
+                  [isFr ? "Confidentialité" : "Privacy",     "/confidentialite"],
+                ].map(([label, href]) => (
+                  <Link
+                    key={label}
+                    href={href}
+                    className="transition-opacity duration-300"
+                    style={{ color: "var(--warm-mute)", opacity: 0.85 }}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </nav>
+
+              <LangSwitcher currentLang={lang} />
+
+              <p className="text-[11px] mt-8 tracking-wide" style={{ color: "var(--warm-mute)" }}>
+                © 2026 Belo · {t("footer_tagline")}
+              </p>
+              <p className="text-[10px] uppercase tracking-[0.25em]" style={{ color: "var(--warm-mute)" }}>
+                Dakar · Paris · Bruxelles
+              </p>
+            </div>
           </div>
-          <p className="text-center text-xs text-text3 mt-5">© 2026 Belo · Dakar · Paris · Bruxelles — {t("footer_tagline")}</p>
         </footer>
       </main>
     </>
