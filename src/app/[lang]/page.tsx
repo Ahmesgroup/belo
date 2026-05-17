@@ -184,9 +184,9 @@ export default async function LandingPage({ params }: Props) {
                 {t("see_all")}
               </Link>
             </div>
-            <div className="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1 no-scrollbar">
+            <div className="flex gap-6 overflow-x-auto pb-3 -mx-1 px-1 no-scrollbar">
               {trendingCards.map((salon: any) => (
-                <div key={salon.id} className="shrink-0 w-[220px] sm:w-[240px]">
+                <div key={salon.id} className="shrink-0 w-[200px] sm:w-[220px]">
                   <SalonCard salon={salon} lang={lang} />
                 </div>
               ))}
@@ -210,7 +210,7 @@ export default async function LandingPage({ params }: Props) {
                 {t("see_all")}
               </Link>
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
               {featuredCards.length === 0
                 ? Array.from({ length: 4 }).map((_, i) => <SalonCardSkeleton key={i} />)
                 : featuredCards.slice(0, 8).map((salon: any) => (
