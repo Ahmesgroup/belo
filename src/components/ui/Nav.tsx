@@ -97,8 +97,30 @@ export function PublicNav() {
                 {t("nav_login")}
               </Link>
             )}
-            <Link href="/salons" style={{padding:"7px 16px",borderRadius:9,fontSize:12,fontWeight:600,background:"var(--g)",color:"#fff",textDecoration:"none"}}>
-              {t("nav_book")}
+            {/* Editorial entry point — never a green CTA pill.
+                Logged-in: 'Agenda' (calm noun). Guest: 'Réserver' (verb, ghost). */}
+            <Link
+              href={user ? destAccount : "/salons"}
+              style={{
+                padding:             "7px 16px",
+                borderRadius:        20,
+                fontSize:            12,
+                fontFamily:          "var(--font-fraunces, var(--serif))",
+                fontWeight:          500,
+                letterSpacing:       "0.01em",
+                background:          "transparent",
+                color:               "var(--text)",
+                textDecoration:      "underline",
+                textUnderlineOffset: 4,
+                textDecorationColor: "var(--border2)",
+                textDecorationThickness: "1px",
+                opacity:             0.92,
+                whiteSpace:          "nowrap",
+              }}
+            >
+              {user
+                ? (lang === "fr" ? "Mon agenda" : "My agenda")
+                : t("nav_book")}
             </Link>
           </div>
         </div>

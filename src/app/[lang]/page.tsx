@@ -1,4 +1,5 @@
 import { notFound }       from "next/navigation";
+import { headers }        from "next/headers";
 import Link               from "next/link";
 import type { Metadata }  from "next";
 import { getTranslations, isValidLang, SEO_META, type SupportedLang } from "@/lib/i18n-server";
@@ -8,6 +9,8 @@ import SearchBar          from "@/components/SearchBar";
 import { SalonCard }      from "@/components/ui/SalonCard";
 import { SalonCardSkeleton } from "@/components/ui/SalonCard";
 import { prisma }         from "@/infrastructure/db/prisma";
+import { detectMarket }   from "@/lib/market/detect";
+import { buildEditorialCredit } from "@/lib/market/cities";
 
 export const revalidate = 120;
 
@@ -116,6 +119,17 @@ export default async function LandingPage({ params }: Props) {
   const isFr                       = lang === "fr";
   const l                          = lang as SupportedLang;
 
+  // ── Dynamic location credit — never hardcoded ─────────────
+  // Vercel sets x-vercel-ip-country automatically (free tier).
+  // Falls back to market-default city when header is missing (dev/SSG).
+  const h        = await headers();
+  const country  = h.get("x-vercel-ip-country") ?? undefined;
+  const market   = detectMarket({ lang, country });
+  const editorialCredit = buildEditorialCredit(
+    { country, market, lang: isFr ? "fr" : "en" },
+    total,
+  );
+
   const trendingCards = trending.map((tr: any) => toCardData({ ...tr.tenant, trending: { bookings24h: tr.bookings24h, score: tr.score } }));
   const featuredCards = featured.map(toCardData);
 
@@ -169,7 +183,7 @@ export default async function LandingPage({ params }: Props) {
               className="text-[10px] uppercase tracking-[0.3em] mb-8 font-medium"
               style={{ color: "var(--warm-mute)" }}
             >
-              {isFr ? `Édition Dakar · ${total} salons` : `Dakar edition · ${total} salons`}
+              {editorialCredit}
             </p>
 
             {/* Titre — Fraunces editorial, poids 600 (pas extrabold), italique pour l'accent */}
