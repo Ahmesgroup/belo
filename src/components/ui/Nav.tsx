@@ -107,6 +107,64 @@ export function PublicNav() {
   );
 }
 
+// ── DashboardNav — atelier beauté, jamais admin SaaS ──────────
+// Surfaces crème, typographie éditoriale, icônes line-art SVG,
+// transitions lentes, aucun emoji marketplace.
+
+// SVG line icons — stroke 1.4, organic, never aggressive
+const ICON_DASH = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="6"  cy="6"  r="1.4" /><circle cx="12" cy="6"  r="1.4" /><circle cx="18" cy="6"  r="1.4" />
+    <circle cx="6"  cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="18" cy="12" r="1.4" />
+    <circle cx="6"  cy="18" r="1.4" /><circle cx="12" cy="18" r="1.4" /><circle cx="18" cy="18" r="1.4" />
+  </svg>
+);
+const ICON_CAL = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3.5" y="5" width="17" height="16" rx="2" />
+    <path d="M8 3v4M16 3v4M3.5 10h17" />
+  </svg>
+);
+const ICON_SCISSORS = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="6"  cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12" />
+  </svg>
+);
+const ICON_CLOCK = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.5 2" />
+  </svg>
+);
+const ICON_PORTRAIT = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="9" r="3.5" />
+    <path d="M5 21c0-4 3.2-7 7-7s7 3 7 7" />
+  </svg>
+);
+const ICON_TEAM = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="9" cy="9" r="3.2" />
+    <path d="M3 20c0-3.2 2.7-5.8 6-5.8s6 2.6 6 5.8" />
+    <circle cx="17" cy="10" r="2.6" />
+    <path d="M16.5 14.4c2.6.4 4.5 2.5 4.5 5.6" />
+  </svg>
+);
+
+const PLAN_LABEL: Record<string, string> = {
+  FREE:    "Free",
+  PRO:     "Pro",
+  PREMIUM: "Premium",
+};
+
 export function DashboardNav({
   plan = "FREE",
   mobile = false,
@@ -121,75 +179,117 @@ export function DashboardNav({
   const pathname = usePathname();
 
   const links = [
-    { href: "/dashboard",          icon: "▦",  label: "Dashboard",      badge: 0 },
-    { href: "/dashboard/bookings", icon: "📅", label: "Réservations",   badge: notifCount },
-    { href: "/dashboard/services", icon: "✂️", label: "Services",       badge: 0 },
-    { href: "/dashboard/horaires", icon: "🕐", label: "Horaires",       badge: 0 },
-    { href: "/dashboard/profil",   icon: "👤", label: "Mon profil",     badge: 0 },
-    ...(plan === "PREMIUM" ? [{ href: "/dashboard/equipe", icon: "👥", label: "Équipe", badge: 0 }] : []),
+    { href: "/dashboard",          icon: ICON_DASH,     label: "Atelier",       badge: 0 },
+    { href: "/dashboard/bookings", icon: ICON_CAL,      label: "Réservations",  badge: notifCount },
+    { href: "/dashboard/services", icon: ICON_SCISSORS, label: "Soins",         badge: 0 },
+    { href: "/dashboard/horaires", icon: ICON_CLOCK,    label: "Horaires",      badge: 0 },
+    { href: "/dashboard/profil",   icon: ICON_PORTRAIT, label: "Mon salon",     badge: 0 },
+    ...(plan === "PREMIUM" ? [{ href: "/dashboard/equipe", icon: ICON_TEAM, label: "Équipe", badge: 0 }] : []),
   ];
-
-  const planColors: Record<string, string> = {
-    FREE: "var(--text3)",
-    PRO: "var(--blue)",
-    PREMIUM: "var(--purple)",
-  };
 
   return (
     <aside style={{
-      width: mobile ? "100%" : 220,
-      background: "var(--card2)",
-      borderRight: mobile ? "none" : `1px solid ${plan === "PREMIUM" ? "rgba(144,96,232,.2)" : "var(--border)"}`,
+      width: mobile ? "100%" : 240,
+      background: "var(--cream)",
+      // Hairline shadow remplace la borderRight dure
+      boxShadow: mobile ? "none" : "1px 0 0 rgba(67,42,28,.05)",
       display: "flex", flexDirection: "column", flexShrink: 0,
       height: mobile ? "auto" : "100vh",
       position: mobile ? "relative" : "sticky",
       top: 0, overflowY: "auto",
     }}>
-      <div style={{padding:"16px",display:"flex",alignItems:"center",gap:9,borderBottom:"1px solid var(--border)"}}>
-        <div style={{width:30,height:30,background:"linear-gradient(135deg,var(--g),#074030)",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>✦</div>
-        <div>
-          <div style={{fontFamily:"var(--serif)",fontWeight:800,fontSize:15}}>
-            belo<span style={{color:"var(--g2)"}}>.</span>
-          </div>
-          <div style={{fontSize:9,color:"var(--text3)",letterSpacing:".06em"}}>Gérant</div>
+      {/* ── Wordmark — éditorial ────────────────────────────── */}
+      <div style={{ padding: "28px 24px 22px" }}>
+        <div style={{
+          fontFamily: "var(--font-fraunces, var(--serif))",
+          fontWeight: 600,
+          fontSize:   22,
+          letterSpacing: "-0.02em",
+          color:      "var(--text)",
+          lineHeight: 1,
+        }}>
+          belo<span style={{ color: "var(--g2)" }}>.</span>
+        </div>
+        <div style={{
+          marginTop: 6,
+          fontSize:  10,
+          color:     "var(--warm-mute)",
+          letterSpacing: "0.22em",
+          textTransform: "uppercase",
+        }}>
+          Atelier
         </div>
       </div>
 
+      {/* ── Plan — texte uniquement, sans encadré coloré ────── */}
       <div style={{
-        margin:"10px 12px 0",padding:"6px 10px",
-        background: plan==="FREE" ? "rgba(255,255,255,.04)" : plan==="PRO" ? "rgba(59,126,246,.08)" : "rgba(144,96,232,.08)",
-        border: `1px solid ${plan==="FREE" ? "var(--border2)" : plan==="PRO" ? "rgba(59,126,246,.2)" : "rgba(144,96,232,.25)"}`,
-        borderRadius:10,fontSize:10,fontWeight:700,
-        color: planColors[plan],
-        letterSpacing:".06em",textAlign:"center",
+        padding: "0 24px 18px",
       }}>
-        {plan === "FREE" ? "🌱 Plan Gratuit" : plan === "PRO" ? "🚀 Plan Pro" : "✦ Plan Premium"}
+        <div style={{
+          fontSize:      9,
+          color:         "var(--warm-mute)",
+          letterSpacing: "0.22em",
+          textTransform: "uppercase",
+        }}>
+          Plan
+        </div>
+        <div style={{
+          fontFamily:    "var(--font-fraunces, var(--serif))",
+          fontWeight:    600,
+          fontSize:      14,
+          color:         "var(--text)",
+          letterSpacing: "-0.01em",
+          marginTop:     2,
+        }}>
+          {PLAN_LABEL[plan]}
+        </div>
       </div>
 
-      <nav style={{padding:"10px 8px",flex:1}}>
+      {/* Séparateur hairline — mx-6 */}
+      <div style={{
+        margin:     "0 24px 8px",
+        height:     1,
+        background: "rgba(67,42,28,.06)",
+      }} aria-hidden="true" />
+
+      {/* ── Navigation — items éditoriaux ────────────────────── */}
+      <nav style={{ padding: "8px 12px", flex: 1 }}>
         {links.map(({ href, icon, label, badge }) => {
           const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           return (
             <Link key={href} href={href} onClick={onClose} style={{
-              display:"flex",alignItems:"center",gap:9,
-              padding: mobile ? "16px 12px" : "8px 10px",
-              borderRadius:8,
-              fontSize: mobile ? 15 : 12,
-              color: active ? "var(--g2)" : "var(--text3)",
-              background: active ? "rgba(34,211,138,.1)" : "transparent",
-              textDecoration:"none",marginBottom:2,transition:".15s",
-              borderLeft: active ? "3px solid var(--g2)" : "3px solid transparent",
-              position: "relative",
+              display:        "flex",
+              alignItems:     "center",
+              gap:            14,
+              padding:        mobile ? "14px 12px" : "10px 12px",
+              borderRadius:   14,
+              fontSize:       mobile ? 15 : 13,
+              fontFamily:     "var(--font-fraunces, var(--serif))",
+              fontWeight:     active ? 600 : 500,
+              letterSpacing:  "-0.005em",
+              color:          active ? "var(--text)" : "var(--warm-mute)",
+              background:     active ? "var(--warm-cream)" : "transparent",
+              textDecoration: "none",
+              marginBottom:   2,
+              transition:     "color 350ms ease, background 350ms ease",
+              position:       "relative",
             }}>
-              <span style={{fontSize:mobile?18:13,width:17,textAlign:"center"}}>{icon}</span>
-              <span style={{flex:1}}>{label}</span>
+              <span style={{ color: active ? "var(--text)" : "var(--warm-mute)", display: "flex" }}>{icon}</span>
+              <span style={{ flex: 1 }}>{label}</span>
               {badge > 0 && (
                 <span style={{
-                  minWidth:16,height:16,borderRadius:99,
-                  background:"var(--red)",color:"#fff",
-                  fontSize:9,fontWeight:700,
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  padding:"0 4px",
+                  minWidth:      18,
+                  height:        18,
+                  borderRadius:  99,
+                  background:    "var(--blush)",
+                  color:         "var(--text)",
+                  fontSize:      10,
+                  fontWeight:    600,
+                  display:       "flex",
+                  alignItems:    "center",
+                  justifyContent:"center",
+                  padding:       "0 6px",
+                  letterSpacing: "0",
                 }}>
                   {badge > 99 ? "99+" : badge}
                 </span>
@@ -198,6 +298,17 @@ export function DashboardNav({
           );
         })}
       </nav>
+
+      {/* ── Footer éditorial du sidebar ──────────────────────── */}
+      <div style={{
+        padding: "16px 24px 24px",
+        fontSize: 10,
+        letterSpacing: "0.2em",
+        textTransform: "uppercase",
+        color: "var(--warm-mute)",
+      }}>
+        Studio · Dakar
+      </div>
     </aside>
   );
 }

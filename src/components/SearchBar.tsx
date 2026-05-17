@@ -1,44 +1,93 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+/**
+ * SearchBar — surface unique, organique, sans bordures dures.
+ *
+ * RÈGLES :
+ * - Une seule surface translucide (rgba blanc 55% + backdrop-blur 14)
+ * - Aucun input/champ visible : tout fond transparent
+ * - Séparateur hairline ultra subtil (1px / 4% opacity)
+ * - Focus glow champagne (jamais vert)
+ * - Vert Belo réservé strictement au CTA "Chercher"
+ * - Radius 32px — organique
+ * - Shadow 0 8px 30px rgba(36,28,24,.04) — imperceptible
+ */
+
+import { useRouter }    from "next/navigation";
 import { useState, useTransition } from "react";
+import { getIntentColor } from "@/lib/design/intent";
 import type { SupportedLang } from "@/lib/i18n-server";
 
 interface SearchBarProps {
-  lang:           SupportedLang;
-  placeholder?:   string;
-  cityPlaceholder?:string;
-  buttonLabel?:   string;
-  defaultSearch?: string;
-  defaultCity?:   string;
-  className?:     string;
+  lang:             SupportedLang;
+  placeholder?:     string;
+  cityPlaceholder?: string;
+  buttonLabel?:     string;
+  defaultSearch?:   string;
+  defaultCity?:     string;
+  className?:       string;
 }
 
 const QUICK_CITIES: string[] = [
   "Dakar", "Abidjan", "Casablanca", "Paris", "Bruxelles", "Luxembourg",
-  "Thiès", "Bamako", "Rabat", "Lyon", "London",
+  "Thiès",  "Bamako",   "Rabat",      "Lyon",  "London",
 ];
+
+// ── ICONS (line-art, jamais d'emoji) ─────────────────────────
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.4"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7.5" />
+      <path d="m20.5 20.5-4.4-4.4" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.4"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 2.5c-3.6 0-6.5 2.9-6.5 6.5 0 4.5 6.5 12.5 6.5 12.5s6.5-8 6.5-12.5c0-3.6-2.9-6.5-6.5-6.5z" />
+      <circle cx="12" cy="9" r="2.4" />
+    </svg>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="animate-spin" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,.35)" strokeWidth="1.6" />
+      <path d="M7 1.5a5.5 5.5 0 0 1 5.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── COMPONENT ─────────────────────────────────────────────────
 
 export default function SearchBar({
   lang,
-  placeholder    = "Coiffure, massage, manucure…",
+  placeholder     = "Coiffure, massage, manucure…",
   cityPlaceholder = "Ville",
-  buttonLabel    = "Chercher",
-  defaultSearch  = "",
-  defaultCity    = "",
-  className      = "",
+  buttonLabel     = "Chercher",
+  defaultSearch   = "",
+  defaultCity     = "",
+  className       = "",
 }: SearchBarProps) {
-  const router                    = useRouter();
+  const router                       = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [search, setSearch]       = useState(defaultSearch);
-  const [city,   setCity]         = useState(defaultCity);
-  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
+  const [search,    setSearch]       = useState(defaultSearch);
+  const [city,      setCity]         = useState(defaultCity);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   function handleCityInput(value: string) {
     setCity(value);
-    if (value.length < 2) { setCitySuggestions([]); return; }
+    if (value.length < 2) { setSuggestions([]); return; }
     const q = value.toLowerCase();
-    setCitySuggestions(QUICK_CITIES.filter(c => c.toLowerCase().startsWith(q)).slice(0, 5));
+    setSuggestions(QUICK_CITIES.filter(c => c.toLowerCase().startsWith(q)).slice(0, 5));
   }
 
   function handleSearch() {
@@ -49,84 +98,133 @@ export default function SearchBar({
     startTransition(() => {
       router.push(`/${lang}/salons${qs ? "?" + qs : ""}`);
     });
-    setCitySuggestions([]);
+    setSuggestions([]);
   }
+
+  // Inputs : fond transparent forcé, aucune border, padding 0 (le label gère
+  // le padding). Override les règles globales input { bg-card2; border:... }.
+  // Focus glow géré par focus-within sur le conteneur parent.
+  const inputClass = [
+    "flex-1 w-full text-sm bg-transparent border-0 p-0",
+    "focus:bg-transparent focus:border-0 focus:ring-0",
+    "outline-none focus:outline-none focus-visible:outline-none",
+    "font-body",
+  ].join(" ");
+
+  const inputStyle: React.CSSProperties = {
+    color:           "var(--text)",
+    // placeholder color via CSS variable trick — handled by inline class below
+  };
 
   return (
     <div className={`w-full max-w-2xl mx-auto ${className}`}>
-      <div className="flex flex-col sm:flex-row gap-2 bg-card rounded-2xl shadow-card p-2 border border-border">
-
-        {/* Service input */}
-        <div className="flex items-center gap-2 flex-1 px-3 py-1">
-          <svg className="w-4 h-4 text-text3 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <circle cx={11} cy={11} r={8} /><path d="m21 21-4.35-4.35" />
-          </svg>
+      <div
+        className={[
+          "flex flex-col sm:flex-row items-stretch sm:items-center",
+          "bg-white/55 border border-white/45",
+          "shadow-[0_8px_30px_rgba(36,28,24,.04)]",
+          "focus-within:shadow-[0_0_0_4px_rgba(217,194,176,.18),0_8px_30px_rgba(36,28,24,.04)]",
+          "transition-shadow duration-500 ease-out",
+          "p-1.5",
+        ].join(" ")}
+        style={{
+          backdropFilter:       "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          borderRadius:         32,
+        }}
+      >
+        {/* ── Service ──────────────────────────────────────── */}
+        <label
+          className="flex items-center gap-3 flex-1 px-5 py-3 sm:py-3.5 cursor-text transition-colors duration-300 rounded-[26px] hover:bg-white/20"
+          style={{ color: "var(--warm-mute)" }}
+        >
+          <SearchIcon />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleSearch()}
             placeholder={placeholder}
-            className="flex-1 bg-transparent outline-none text-sm text-text placeholder:text-text3 font-sans"
+            className={inputClass}
+            style={inputStyle}
+            aria-label={placeholder}
           />
-        </div>
+        </label>
 
-        {/* Divider */}
-        <div className="hidden sm:block w-px bg-border2 self-stretch my-1" />
+        {/* Hairline divider — desktop only, ultra subtil */}
+        <div
+          className="hidden sm:block self-stretch my-2"
+          style={{ width: 1, background: "rgba(67,42,28,.08)" }}
+          aria-hidden="true"
+        />
 
-        {/* City input with suggestions */}
-        <div className="relative flex items-center gap-2 flex-1 px-3 py-1">
-          <svg className="w-4 h-4 text-text3 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-            <circle cx={12} cy={9} r={2.5} />
-          </svg>
+        {/* ── Ville ────────────────────────────────────────── */}
+        <label
+          className="relative flex items-center gap-3 flex-1 px-5 py-3 sm:py-3.5 cursor-text transition-colors duration-300 rounded-[26px] hover:bg-white/20"
+          style={{ color: "var(--warm-mute)" }}
+        >
+          <PinIcon />
           <input
             type="text"
             value={city}
             onChange={e => handleCityInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleSearch()}
             placeholder={cityPlaceholder}
-            className="flex-1 bg-transparent outline-none text-sm text-text placeholder:text-text3 font-sans"
+            className={inputClass}
+            style={inputStyle}
+            aria-label={cityPlaceholder}
           />
 
-          {citySuggestions.length > 0 && (
-            <ul className="absolute top-full left-0 right-0 mt-2 bg-card border border-border2 rounded-xl shadow-card z-50 overflow-hidden">
-              {citySuggestions.map(c => (
+          {suggestions.length > 0 && (
+            <ul
+              className="absolute top-full left-0 right-0 mt-3 overflow-hidden z-50"
+              style={{
+                backgroundColor: "rgba(255,255,255,.85)",
+                backdropFilter:  "blur(14px)",
+                WebkitBackdropFilter: "blur(14px)",
+                border:          "1px solid rgba(255,255,255,.5)",
+                boxShadow:       "0 8px 30px rgba(36,28,24,.06)",
+                borderRadius:    20,
+              }}
+            >
+              {suggestions.map(c => (
                 <li key={c}>
                   <button
                     type="button"
-                    onClick={() => { setCity(c); setCitySuggestions([]); }}
-                    className="w-full px-4 py-2.5 text-sm text-text2 text-left hover:bg-card2 transition-colors"
+                    onMouseDown={(e) => { e.preventDefault(); setCity(c); setSuggestions([]); }}
+                    className="w-full px-5 py-2.5 text-sm text-left transition-colors duration-300 hover:bg-white/40"
+                    style={{ color: "var(--text2)" }}
                   >
-                    📍 {c}
+                    {c}
                   </button>
                 </li>
               ))}
             </ul>
           )}
-        </div>
+        </label>
 
-        {/* Search button */}
+        {/* ── CTA — seul vert, intent.ts ──────────────────── */}
         <button
           type="button"
           onClick={handleSearch}
           disabled={isPending}
-          className="
-            shrink-0 px-6 py-2.5 rounded-xl font-semibold text-sm text-white
-            bg-g1 hover:bg-g3 transition-colors duration-200
-            disabled:opacity-60 disabled:cursor-not-allowed
-            shadow-green
-          "
+          className="shrink-0 px-6 py-3 sm:py-3.5 font-medium text-sm text-white transition-opacity duration-500"
+          style={{
+            backgroundColor: getIntentColor("cta"),
+            borderRadius:    26,
+            opacity:         isPending ? 0.7 : 0.95,
+            margin:          "0",
+            letterSpacing:   "0.01em",
+          }}
         >
           {isPending ? (
-            <span className="flex items-center gap-2">
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+            <span className="inline-flex items-center gap-2">
+              <Spinner />
               {lang === "fr" ? "Recherche…" : "Searching…"}
             </span>
-          ) : buttonLabel}
+          ) : (
+            buttonLabel
+          )}
         </button>
       </div>
     </div>
