@@ -423,11 +423,13 @@ export default async function LandingPage({ params }: Props) {
 
               <nav className="flex flex-wrap justify-center gap-x-8 gap-y-3 text-[12px]">
                 {[
-                  [isFr ? "Accueil"        : "Home",         `/${lang}`],
-                  [isFr ? "Salons"         : "Salons",       `/${lang}/salons`],
-                  [isFr ? "Tarifs"         : "Pricing",      `/${lang}/plans`],
-                  [isFr ? "Pour les salons" : "For salons",  `/${lang}/for-salons`],
-                  [isFr ? "Confidentialité" : "Privacy",     "/confidentialite"],
+                  [isFr ? "Accueil"         : "Home",         `/${lang}`],
+                  [isFr ? "Salons"          : "Salons",       `/${lang}/salons`],
+                  [isFr ? "Tarifs"          : "Pricing",      `/${lang}/plans`],
+                  [isFr ? "Pour les salons" : "For salons",   `/${lang}/for-salons`],
+                  [isFr ? "Confidentialité" : "Privacy",      `/${lang}/legal/privacy`],
+                  [isFr ? "Conditions"      : "Terms",        `/${lang}/legal/terms`],
+                  [isFr ? "Cookies"         : "Cookies",      `/${lang}/legal/cookies`],
                 ].map(([label, href]) => (
                   <Link
                     key={label}

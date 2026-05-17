@@ -15,6 +15,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isValidLang, SUPPORTED_LANGS, SEO_META, type SupportedLang } from "@/lib/i18n-server";
 import LangSync from "@/components/LangSync";
+import { detectMarket } from "@/lib/market/detect";
 
 type Props = {
   children: React.ReactNode;
@@ -73,8 +74,13 @@ export default async function LangLayout({ children, params }: Props) {
   // Return 404 for any path segment that is not a supported language
   if (!isValidLang(lang)) notFound();
 
+  // Cultural atmosphere — derived from lang only at this level.
+  // Deeper routes (e.g. /[lang]/salons/[city]) override via their own
+  // detectMarket() call if needed. Africa is the launch primary.
+  const market = detectMarket({ lang });
+
   return (
-    <>
+    <div data-market={market} className="contents">
       {/*
         LangSync is a thin client component that fires setLang(lang) on mount,
         keeping the client-side LangContext in sync with the URL.
@@ -82,6 +88,6 @@ export default async function LangLayout({ children, params }: Props) {
       */}
       <LangSync lang={lang as SupportedLang} />
       {children}
-    </>
+    </div>
   );
 }
